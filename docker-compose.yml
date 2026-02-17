@@ -32,7 +32,7 @@ services:
             APP_NAME: HelpDesk
             APP_ENV: production
             APP_DEBUG: "false"
-            APP_URL: https://13.50.112.228
+            APP_URL: https://localhost
             DB_CONNECTION: mysql
             DB_HOST: mysql
             DB_PORT: 3306
@@ -54,7 +54,7 @@ services:
             context: ./frontend
             dockerfile: Dockerfile
             args:
-                VITE_API_URL: https://13.50.112.228/api
+                VITE_API_URL: https://localhost/api
         container_name: helpdesk-frontend
         restart: unless-stopped
         # ports:
