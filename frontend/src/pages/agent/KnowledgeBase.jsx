@@ -1,0 +1,241 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuthStore } from '../../store/authStore';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import apiClient from '../../lib/api';
+import AgentLayout from '../../components/agent/AgentLayout';
+
+export default function KnowledgeBase() {
+    const { logout } = useAuthStore();
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingArticle, setEditingArticle] = useState(null);
+    const [formData, setFormData] = useState({
+        title: '',
+        content: '',
+        category_id: '',
+        is_published: true
+    });
+
+    const queryClient = useQueryClient();
+
+    const { data: articles, isLoading } = useQuery({
+        queryKey: ['kb', searchQuery],
+        queryFn: async () => {
+            const response = await apiClient.get(`/kb?search=${searchQuery}`);
+            return response.data;
+        },
+    });
+
+    const { data: categories } = useQuery({
+        queryKey: ['categories-flat'],
+        queryFn: async () => {
+            const response = await apiClient.get('/categories');
+            // Flatten for easier selection, or could be hierarchical in modal
+            const flatten = (items, depth = 0) => {
+                let flat = [];
+                items.forEach(item => {
+                    flat.push({ ...item, depth });
+                    if (item.children) {
+                        flat = [...flat, ...flatten(item.children, depth + 1)];
+                    }
+                });
+                return flat;
+            };
+            return flatten(response.data);
+        },
+    });
+
+    const createMutation = useMutation({
+        mutationFn: async (data) => apiClient.post('/kb', data),
+        onSuccess: () => {
+            queryClient.invalidateQueries(['kb']);
+            handleCloseModal();
+        },
+    });
+
+    const updateMutation = useMutation({
+        mutationFn: async ({ id, data }) => apiClient.patch(`/kb/${id}`, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries(['kb']);
+            handleCloseModal();
+        },
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: async (id) => apiClient.delete(`/kb/${id}`),
+        onSuccess: () => queryClient.invalidateQueries(['kb']),
+    });
+
+    const handleOpenModal = (article = null) => {
+        if (article) {
+            setEditingArticle(article);
+            setFormData({
+                title: article.title,
+                content: article.content,
+                category_id: article.category_id || '',
+                is_published: article.is_published
+            });
+        } else {
+            setEditingArticle(null);
+            setFormData({ title: '', content: '', category_id: '', is_published: true });
+        }
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setEditingArticle(null);
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (editingArticle) {
+            updateMutation.mutate({ id: editingArticle.id, data: formData });
+        } else {
+            createMutation.mutate(formData);
+        }
+    };
+
+    const handleDelete = (id) => {
+        if (window.confirm('Are you sure you want to delete this article?')) {
+            deleteMutation.mutate(id);
+        }
+    };
+
+    return (
+        <AgentLayout>
+            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Filters */}
+                <div className="mb-6 relative max-w-md">
+                    <input
+                        type="text"
+                        placeholder="Search troubleshooting steps..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 transition"
+                    />
+                    <svg className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+
+                {isLoading ? (
+                    <div className="flex justify-center py-12">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {articles?.map(article => (
+                            <div key={article.id} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition flex flex-col">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="px-2 py-0.5 bg-primary-50 text-primary-700 text-xs font-medium rounded">
+                                        {article.category?.name || 'Uncategorized'}
+                                    </span>
+                                    <div className="flex space-x-1">
+                                        <button onClick={() => handleOpenModal(article)} className="p-1 text-gray-400 hover:text-primary-600 rounded">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                                        </button>
+                                        <button onClick={() => handleDelete(article.id)} className="p-1 text-gray-400 hover:text-red-600 rounded">
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-900 mb-2">{article.title}</h3>
+                                <p className="text-sm text-gray-600 flex-1 line-clamp-3 mb-4">{article.content}</p>
+                                {!article.is_published && <span className="text-xs text-orange-500 font-medium italic mb-2">Draft</span>}
+                                <button
+                                    onClick={() => handleOpenModal(article)}
+                                    className="text-sm font-semibold text-primary-600 hover:text-primary-800"
+                                >
+                                    Read more →
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </main>
+
+            {isModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full overflow-hidden">
+                        <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-gray-900">
+                                {editingArticle ? 'Edit Article' : 'New Knowledge Base Article'}
+                            </h2>
+                            <button onClick={handleCloseModal} className="text-gray-400 hover:text-gray-600">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={formData.title}
+                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                                <select
+                                    value={formData.category_id}
+                                    onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                >
+                                    <option value="">Uncategorized</option>
+                                    {categories?.map(cat => (
+                                        <option key={cat.id} value={cat.id}>
+                                            {'\u00A0'.repeat(cat.depth * 4)}{cat.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Content (Troubleshooting Steps)</label>
+                                <textarea
+                                    required
+                                    rows={8}
+                                    value={formData.content}
+                                    onChange={(e) => setFormData({ ...formData, content: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    placeholder="Write troubleshooting steps here..."
+                                />
+                            </div>
+                            <div className="flex items-center">
+                                <label className="flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.is_published}
+                                        onChange={(e) => setFormData({ ...formData, is_published: e.target.checked })}
+                                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                    />
+                                    <span className="ml-2 text-sm text-gray-700">Published</span>
+                                </label>
+                            </div>
+                            <div className="flex justify-end space-x-3 pt-6">
+                                <button
+                                    type="button"
+                                    onClick={handleCloseModal}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-6 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition"
+                                >
+                                    {editingArticle ? 'Save Changes' : 'Create Article'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+        </AgentLayout>
+    );
+}

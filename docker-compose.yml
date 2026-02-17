@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+    mysql:
+        image: mysql:8.0
+        container_name: helpdesk-mysql
+        restart: unless-stopped
+        environment:
+            MYSQL_DATABASE: helpdesk
+            MYSQL_ROOT_PASSWORD: root_password_change_me
+            MYSQL_USER: helpdesk_user
+            MYSQL_PASSWORD: helpdesk_password_change_me
+        ports:
+            - "3307:3306"
+        volumes:
+            - mysql_data:/var/lib/mysql
+        networks:
+            - helpdesk-network
+        healthcheck:
+            test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+
+    backend:
+        build:
+            context: ./backend
+            dockerfile: Dockerfile
+        container_name: helpdesk-backend
+        restart: unless-stopped
+        environment:
+            APP_NAME: HelpDesk
+            APP_ENV: production
+            APP_DEBUG: "false"
+            APP_URL: https://13.50.112.228
+            DB_CONNECTION: mysql
+            DB_HOST: mysql
+            DB_PORT: 3306
+            DB_DATABASE: helpdesk
+            DB_USERNAME: helpdesk_user
+            DB_PASSWORD: helpdesk_password_change_me
+        # ports:
+        #     - "8000:80"
+        depends_on:
+            mysql:
+                condition: service_healthy
+        volumes:
+            - ./backend/storage:/var/www/html/storage
+        networks:
+            - helpdesk-network
+
+    frontend:
+        build:
+            context: ./frontend
+            dockerfile: Dockerfile
+            args:
+                VITE_API_URL: https://13.50.112.228/api
+        container_name: helpdesk-frontend
+        restart: unless-stopped
+        # ports:
+        #     - "80:80"
+        depends_on:
+            - backend
+        networks:
+            - helpdesk-network
+
+    proxy:
+        image: nginx:alpine
+        container_name: helpdesk-proxy
+        restart: unless-stopped
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - ./proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+            - ./proxy/certs:/etc/nginx/certs:ro
+        depends_on:
+            - frontend
+            - backend
+        networks:
+            - helpdesk-network
+
+volumes:
+    mysql_data:
+        driver: local
+
+networks:
+    helpdesk-network:
+        driver: bridge
