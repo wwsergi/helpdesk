@@ -7,12 +7,20 @@ import FileUpload from '../../components/FileUpload';
 
 export default function AgentTicketDetail() {
     const { id } = useParams();
-    const { logout } = useAuthStore();
+    const logout = useAuthStore((state) => state.logout);
+    const navigate = useNavigate();
     const [replyText, setReplyText] = useState('');
     const [isInternal, setIsInternal] = useState(false);
     const [files, setFiles] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [selectedStatus, setSelectedStatus] = useState('');
+    const [isDelegateModalOpen, setIsDelegateModalOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState('conversation');
+    const [delegateForm, setDelegateForm] = useState({
+        description: '',
+        user_id: '',
+        priority: 'P2'
+    });
     const queryClient = useQueryClient();
 
     const { data: ticket, isLoading } = useQuery({
@@ -27,7 +35,15 @@ export default function AgentTicketDetail() {
     const { data: agents } = useQuery({
         queryKey: ['agents'],
         queryFn: async () => {
-            const response = await apiClient.get('/agents');
+            const response = await apiClient.get('/users?role=agent');
+            return response.data;
+        },
+    });
+
+    const { data: ticketTypes } = useQuery({
+        queryKey: ['ticket-types'],
+        queryFn: async () => {
+            const response = await apiClient.get('/ticket-types');
             return response.data;
         },
     });
@@ -37,7 +53,7 @@ export default function AgentTicketDetail() {
             return await apiClient.post(`/tickets/${id}/messages`, data);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(['ticket', id]);
+            queryClient.invalidateQueries({ queryKey: ['ticket', id] });
             setReplyText('');
             setFiles([]);
             setIsInternal(false);
@@ -48,8 +64,33 @@ export default function AgentTicketDetail() {
         mutationFn: async (data) => {
             return await apiClient.patch(`/tickets/${id}`, data);
         },
+        onSuccess: (response) => {
+            const updatedTicket = response.data;
+            queryClient.setQueryData(['ticket', id], updatedTicket);
+            // If the status changed in the backend, update local state
+            if (updatedTicket.status) {
+                setSelectedStatus(updatedTicket.status);
+            }
+        },
+    });
+
+    const createChildTicketMutation = useMutation({
+        mutationFn: async (data) => {
+            return await apiClient.post('/tickets', {
+                ...data,
+                parent_ticket_id: id,
+                type: 'OTHER',
+                contact_id: ticket.contact_id
+            });
+        },
         onSuccess: () => {
-            queryClient.invalidateQueries(['ticket', id]);
+            queryClient.invalidateQueries({ queryKey: ['ticket', id] });
+            setIsDelegateModalOpen(false);
+            setDelegateForm({
+                description: '',
+                user_id: '',
+                priority: 'P2'
+            });
         },
     });
 
@@ -58,7 +99,7 @@ export default function AgentTicketDetail() {
             return await apiClient.delete(`/tickets/${id}`);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(['tickets']);
+            queryClient.invalidateQueries({ queryKey: ['tickets'] });
             navigate('/agent/inbox');
         },
     });
@@ -96,6 +137,11 @@ export default function AgentTicketDetail() {
         }
     };
 
+    const handleDelegateSubmit = (e) => {
+        e.preventDefault();
+        createChildTicketMutation.mutate(delegateForm);
+    };
+
     const { data: flatCategories } = useQuery({
         queryKey: ['categories-flat'],
         queryFn: async () => {
@@ -121,13 +167,18 @@ export default function AgentTicketDetail() {
     };
 
     const handleAssignmentChange = (e) => {
-        const userId = e.target.value || null;
+        const userId = e.target.value === '' ? null : e.target.value;
         updateTicketMutation.mutate({ user_id: userId });
     };
 
     const handleCategoryChange = (e) => {
         const categoryId = e.target.value || null;
         updateTicketMutation.mutate({ category_id: categoryId });
+    };
+
+    const handleTypeChange = (e) => {
+        const typeId = e.target.value || null;
+        updateTicketMutation.mutate({ ticket_type_id: typeId });
     };
 
     const handleDelete = () => {
@@ -190,125 +241,228 @@ export default function AgentTicketDetail() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Main Content */}
                     <div className="lg:col-span-2 space-y-6">
-                        {/* Messages Timeline */}
-                        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-4">Conversation</h2>
-                            <div className="space-y-4">
-                                {ticket.messages && ticket.messages.length > 0 ? (
-                                    ticket.messages.map((message) => (
-                                        <div
-                                            key={message.id}
-                                            className={`p-4 rounded-lg ${message.is_internal
-                                                ? 'bg-yellow-50 border border-yellow-200'
-                                                : 'bg-gray-50 border border-gray-200'
-                                                }`}
-                                        >
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div>
-                                                    <span className="font-semibold text-gray-900">
-                                                        {message.author?.name || 'Unknown'}
-                                                    </span>
-                                                    {message.is_internal && (
-                                                        <span className="ml-2 px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs font-medium rounded">
-                                                            Internal Note
+                        {/* Tabs */}
+                        <div className="border-b border-gray-200">
+                            <nav className="-mb-px flex space-x-8">
+                                <button
+                                    onClick={() => setActiveTab('conversation')}
+                                    className={`${activeTab === 'conversation'
+                                        ? 'border-primary-500 text-primary-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                                >
+                                    Conversation
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('subtickets')}
+                                    className={`${activeTab === 'subtickets'
+                                        ? 'border-primary-500 text-primary-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
+                                >
+                                    Subtickets
+                                    {ticket.children?.length > 0 && (
+                                        <span className="ml-2 bg-gray-100 text-gray-900 py-0.5 px-2.5 rounded-full text-xs font-medium">
+                                            {ticket.children.length}
+                                        </span>
+                                    )}
+                                </button>
+                            </nav>
+                        </div>
+
+                        {/* Tab Content */}
+                        {activeTab === 'conversation' && (
+                            <>
+                                {/* Messages Timeline */}
+                                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Conversation</h2>
+                                    <div className="space-y-4">
+                                        {ticket.messages && ticket.messages.length > 0 ? (
+                                            ticket.messages.map((message) => (
+                                                <div
+                                                    key={message.id}
+                                                    className={`p-4 rounded-lg ${message.is_internal
+                                                        ? 'bg-yellow-50 border border-yellow-200'
+                                                        : 'bg-gray-50 border border-gray-200'
+                                                        }`}
+                                                >
+                                                    <div className="flex justify-between items-start mb-2">
+                                                        <div>
+                                                            <span className="font-semibold text-gray-900">
+                                                                {message.author?.name || 'Unknown'}
+                                                            </span>
+                                                            {message.is_internal && (
+                                                                <span className="ml-2 px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs font-medium rounded">
+                                                                    Internal Note
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-xs text-gray-500">
+                                                            {new Date(message.created_at).toLocaleString()}
                                                         </span>
+                                                    </div>
+                                                    <p className="text-gray-700">{message.body}</p>
+
+                                                    {/* Attachments */}
+                                                    {message.attachments && message.attachments.length > 0 && (
+                                                        <div className="mt-3 pt-3 border-t border-gray-200/50">
+                                                            <p className="text-xs font-medium text-gray-500 mb-2">Attachments:</p>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {message.attachments.map(att => (
+                                                                    <a
+                                                                        key={att.id}
+                                                                        href={att.url}
+                                                                        onClick={(e) => {
+                                                                            e.preventDefault();
+                                                                            apiClient.get(att.url, { responseType: 'blob' })
+                                                                                .then(response => {
+                                                                                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                                                                                    const link = document.createElement('a');
+                                                                                    link.href = url;
+                                                                                    link.setAttribute('download', att.name);
+                                                                                    document.body.appendChild(link);
+                                                                                    link.click();
+                                                                                    link.remove();
+                                                                                })
+                                                                                .catch(err => console.error('Download failed', err));
+                                                                        }}
+                                                                        className="flex items-center px-3 py-1.5 bg-white border border-gray-200 rounded text-sm text-primary-600 hover:text-primary-700 hover:border-primary-300 transition"
+                                                                    >
+                                                                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                                                        </svg>
+                                                                        {att.name} <span className="text-gray-400 ml-1">({(att.size / 1024).toFixed(0)}KB)</span>
+                                                                    </a>
+                                                                ))}
+                                                            </div>
+                                                        </div>
                                                     )}
                                                 </div>
-                                                <span className="text-xs text-gray-500">
-                                                    {new Date(message.created_at).toLocaleString()}
-                                                </span>
-                                            </div>
-                                            <p className="text-gray-700">{message.body}</p>
+                                            ))
+                                        ) : (
+                                            <p className="text-gray-500 text-center py-8">No messages yet</p>
+                                        )}
+                                    </div>
+                                </div>
 
-                                            {/* Attachments */}
-                                            {message.attachments && message.attachments.length > 0 && (
-                                                <div className="mt-3 pt-3 border-t border-gray-200/50">
-                                                    <p className="text-xs font-medium text-gray-500 mb-2">Attachments:</p>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {message.attachments.map(att => (
-                                                            <a
-                                                                key={att.id}
-                                                                href={att.url}
-                                                                onClick={(e) => {
-                                                                    e.preventDefault();
-                                                                    // Use API to download with auth token if needed, or open in new tab
-                                                                    // For now, let's open in new tab but we might need a token param or header
-                                                                    // Since it's an API route protected by Sanctum, direct link won't work easily in browser without token
-                                                                    // Better to trigger a download via fetchBlob
-                                                                    apiClient.get(att.url, { responseType: 'blob' })
-                                                                        .then(response => {
-                                                                            const url = window.URL.createObjectURL(new Blob([response.data]));
-                                                                            const link = document.createElement('a');
-                                                                            link.href = url;
-                                                                            link.setAttribute('download', att.name);
-                                                                            document.body.appendChild(link);
-                                                                            link.click();
-                                                                            link.remove();
-                                                                        })
-                                                                        .catch(err => console.error('Download failed', err));
-                                                                }}
-                                                                className="flex items-center px-3 py-1.5 bg-white border border-gray-200 rounded text-sm text-primary-600 hover:text-primary-700 hover:border-primary-300 transition"
-                                                            >
-                                                                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                                                                </svg>
-                                                                {att.name} <span className="text-gray-400 ml-1">({(att.size / 1024).toFixed(0)}KB)</span>
-                                                            </a>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
+                                {/* Reply Form */}
+                                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                                    <h2 className="text-lg font-semibold text-gray-900 mb-4">Reply</h2>
+                                    <form onSubmit={handleReply} className="space-y-4">
+                                        <div>
+                                            <textarea
+                                                value={replyText}
+                                                onChange={(e) => setReplyText(e.target.value)}
+                                                rows={6}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                placeholder="Type your reply..."
+                                                required
+                                            />
                                         </div>
-                                    ))
-                                ) : (
-                                    <p className="text-gray-500 text-center py-8">No messages yet</p>
-                                )}
-                            </div>
-                        </div>
 
-                        {/* Reply Form */}
-                        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-4">Reply</h2>
-                            <form onSubmit={handleReply} className="space-y-4">
-                                <div>
-                                    <textarea
-                                        value={replyText}
-                                        onChange={(e) => setReplyText(e.target.value)}
-                                        rows={6}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                        placeholder="Type your reply..."
-                                        required
-                                    />
+                                        <div>
+                                            <FileUpload files={files} onFilesChange={setFiles} maxSizeBytes={10 * 1024 * 1024} />
+                                        </div>
+
+                                        <div className="flex items-center justify-between">
+                                            <label className="flex items-center">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isInternal}
+                                                    onChange={(e) => setIsInternal(e.target.checked)}
+                                                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                                />
+                                                <span className="ml-2 text-sm text-gray-700">Internal note (not visible to customer)</span>
+                                            </label>
+                                            <button
+                                                type="submit"
+                                                disabled={replyMutation.isPending || isUploading}
+                                                className="px-6 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+                                            >
+                                                {isUploading ? 'Uploading...' : replyMutation.isPending ? 'Sending...' : 'Send Reply'}
+                                            </button>
+                                        </div>
+                                    </form>
                                 </div>
+                            </>
+                        )}
 
-                                <div>
-                                    <FileUpload files={files} onFilesChange={setFiles} maxSizeBytes={10 * 1024 * 1024} />
-                                </div>
-
-                                <div className="flex items-center justify-between">
-                                    <label className="flex items-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={isInternal}
-                                            onChange={(e) => setIsInternal(e.target.checked)}
-                                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                                        />
-                                        <span className="ml-2 text-sm text-gray-700">Internal note (not visible to customer)</span>
-                                    </label>
+                        {activeTab === 'subtickets' && (
+                            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-lg font-semibold text-gray-900">Sub-Tickets (Delegated)</h2>
                                     <button
-                                        type="submit"
-                                        disabled={replyMutation.isPending || isUploading}
-                                        className="px-6 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+                                        onClick={() => setIsDelegateModalOpen(true)}
+                                        className="text-sm bg-primary-50 text-primary-700 px-3 py-1.5 rounded-lg hover:bg-primary-100 font-medium"
                                     >
-                                        {isUploading ? 'Uploading...' : replyMutation.isPending ? 'Sending...' : 'Send Reply'}
+                                        + Create New
                                     </button>
                                 </div>
-                            </form>
-                        </div>
+
+                                {ticket.children && ticket.children.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {ticket.children.map(child => (
+                                            <div key={child.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                                <div>
+                                                    <div className="font-medium text-gray-900">
+                                                        <Link to={`/agent/tickets/${child.id}`} className="hover:underline text-primary-600">
+                                                            {child.uuid}
+                                                        </Link>
+                                                        <span className="text-gray-500 mx-2">-</span>
+                                                        <span className="text-gray-900">{child.subject}</span>
+                                                    </div>
+                                                    <div className="text-sm text-gray-500 flex items-center mt-1">
+                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${child.status === 'RESOLVED' ? 'bg-green-100 text-green-800' :
+                                                            child.status === 'NEW' ? 'bg-blue-100 text-blue-800' :
+                                                                'bg-yellow-100 text-yellow-800'
+                                                            }`}>
+                                                            {child.status.replace('_', ' ')}
+                                                        </span>
+                                                        <span className="mx-2">•</span>
+                                                        <span>Assigned to: {child.user?.name || 'Unassigned'}</span>
+                                                    </div>
+                                                </div>
+                                                <Link
+                                                    to={`/agent/tickets/${child.id}`}
+                                                    className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 transition"
+                                                >
+                                                    View
+                                                </Link>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                                        <p className="text-gray-500 mb-2">No sub-tickets created yet.</p>
+                                        <button
+                                            onClick={() => setIsDelegateModalOpen(true)}
+                                            className="text-primary-600 hover:text-primary-800 text-sm font-medium"
+                                        >
+                                            Delegate this ticket
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* Sidebar */}
                     <div className="space-y-6">
+                        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
+                            <div className="space-y-3">
+                                <button
+                                    onClick={() => setIsDelegateModalOpen(true)}
+                                    className="w-full bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 transition flex items-center justify-center"
+                                >
+                                    <svg className="w-5 h-5 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                    </svg>
+                                    Delegate / Create Sub-Ticket
+                                </button>
+                            </div>
+                        </div>
+
                         {/* Ticket Info */}
                         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                             <h2 className="text-lg font-semibold text-gray-900 mb-4">Ticket Details</h2>
@@ -322,11 +476,9 @@ export default function AgentTicketDetail() {
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                     >
                                         <option value="NEW">New</option>
-                                        <option value="OPEN">Open</option>
                                         <option value="IN_PROGRESS">In Progress</option>
                                         <option value="PENDING_CUSTOMER">Pending Customer</option>
                                         <option value="RESOLVED">Resolved</option>
-                                        <option value="CLOSED">Closed</option>
                                     </select>
                                 </div>
 
@@ -337,7 +489,19 @@ export default function AgentTicketDetail() {
 
                                 <div>
                                     <label className="block text-gray-600 mb-1">Type</label>
-                                    <div className="font-medium text-gray-900">{ticket.type || 'N/A'}</div>
+                                    <select
+                                        value={ticket.ticket_type_id || ''}
+                                        onChange={handleTypeChange}
+                                        disabled={updateTicketMutation.isPending}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    >
+                                        <option value="">Select a type...</option>
+                                        {ticketTypes?.filter(t => t.is_active || t.id === ticket.ticket_type_id).map((type) => (
+                                            <option key={type.id} value={type.id}>
+                                                {type.name}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
 
                                 <div>
@@ -379,6 +543,28 @@ export default function AgentTicketDetail() {
                                     </select>
                                 </div>
 
+                                <div>
+                                    <label className="block text-gray-600 mb-1">Jira Issue</label>
+                                    <input
+                                        type="url"
+                                        placeholder="https://jira.example.com/browse/TKT-123"
+                                        value={ticket.jira_issue_link || ''}
+                                        onChange={(e) => updateTicketMutation.mutate({ jira_issue_link: e.target.value })}
+                                        disabled={updateTicketMutation.isPending}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                                    />
+                                    {ticket.jira_issue_link && (
+                                        <a
+                                            href={ticket.jira_issue_link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-xs text-primary-600 hover:text-primary-800 mt-1 inline-block"
+                                        >
+                                            Open in Jira ↗
+                                        </a>
+                                    )}
+                                </div>
+
                                 <div className="pt-4 border-t border-gray-100">
                                     <button
                                         onClick={handleDelete}
@@ -405,6 +591,89 @@ export default function AgentTicketDetail() {
                     </div>
                 </div>
             </main>
+
+            {/* Delegate/Child Ticket Modal */}
+            {isDelegateModalOpen && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                        <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+                            <div className="absolute inset-0 bg-gray-500 opacity-75" onClick={() => setIsDelegateModalOpen(false)}></div>
+                        </div>
+
+                        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+                        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                            <form onSubmit={handleDelegateSubmit}>
+                                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                                    <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+                                        Delegate Ticket (Create Sub-Ticket)
+                                    </h3>
+
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Assign To (Secondary Agent)</label>
+                                            <select
+                                                required
+                                                value={delegateForm.user_id}
+                                                onChange={(e) => setDelegateForm({ ...delegateForm, user_id: e.target.value })}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                                            >
+                                                <option value="">Select Agent...</option>
+                                                {agents?.map(agent => (
+                                                    <option key={agent.id} value={agent.id}>{agent.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Internal Instructions</label>
+                                            <textarea
+                                                required
+                                                rows={4}
+                                                value={delegateForm.description}
+                                                onChange={(e) => setDelegateForm({ ...delegateForm, description: e.target.value })}
+                                                placeholder="Provide detailed instructions for the delegated agent..."
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                                            <select
+                                                value={delegateForm.priority}
+                                                onChange={(e) => setDelegateForm({ ...delegateForm, priority: e.target.value })}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                            >
+                                                <option value="P1">P1 - Critical</option>
+                                                <option value="P2">P2 - High</option>
+                                                <option value="P3">P3 - Normal</option>
+                                                <option value="P4">P4 - Low</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                                    <button
+                                        type="submit"
+                                        disabled={createChildTicketMutation.isPending}
+                                        className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:ml-3 sm:w-auto sm:text-sm"
+                                    >
+                                        {createChildTicketMutation.isPending ? 'Creating...' : 'Create Sub-Ticket'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsDelegateModalOpen(false)}
+                                        className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

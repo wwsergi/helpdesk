@@ -34,7 +34,7 @@ export default function Agents() {
             return await apiClient.post('/agents', data);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(['agents']);
+            queryClient.invalidateQueries({ queryKey: ['agents'] });
             setIsModalOpen(false);
             resetForm();
         },
@@ -48,7 +48,7 @@ export default function Agents() {
             return await apiClient.patch(`/agents/${id}`, data);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(['agents']);
+            queryClient.invalidateQueries({ queryKey: ['agents'] });
             setIsModalOpen(false);
             resetForm();
         },
@@ -62,7 +62,7 @@ export default function Agents() {
             return await apiClient.delete(`/agents/${id}`);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(['agents']);
+            queryClient.invalidateQueries({ queryKey: ['agents'] });
         },
         onError: (err) => {
             alert(err.response?.data?.message || 'Failed to delete agent');

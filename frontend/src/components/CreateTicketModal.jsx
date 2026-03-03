@@ -13,7 +13,7 @@ export default function CreateTicketModal({ isOpen, onClose }) {
         subject: '',
         description: '',
         priority: 'P3',
-        type: 'QUESTION',
+        ticket_type_id: '',
         category_id: '',
     });
 
@@ -28,6 +28,14 @@ export default function CreateTicketModal({ isOpen, onClose }) {
             return response.data;
         },
         enabled: contactSearch.length >= 2,
+    });
+
+    const { data: ticketTypes } = useQuery({
+        queryKey: ['ticket-types'],
+        queryFn: async () => {
+            const response = await apiClient.get('/ticket-types');
+            return response.data;
+        },
     });
 
     const { data: flatCategories } = useQuery({
@@ -53,8 +61,8 @@ export default function CreateTicketModal({ isOpen, onClose }) {
             return await apiClient.post('/tickets', data);
         },
         onSuccess: (response) => {
-            queryClient.invalidateQueries(['tickets']);
-            queryClient.invalidateQueries(['dashboard-stats']);
+            queryClient.invalidateQueries({ queryKey: ['tickets'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
             onClose();
             resetForm();
             navigate(`/agent/tickets/${response.data.id}`);
@@ -66,7 +74,7 @@ export default function CreateTicketModal({ isOpen, onClose }) {
             subject: '',
             description: '',
             priority: 'P3',
-            type: 'QUESTION',
+            ticket_type_id: '',
             category_id: '',
         });
         setSelectedContact(null);
@@ -199,16 +207,15 @@ export default function CreateTicketModal({ isOpen, onClose }) {
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
                             <select
-                                value={newTicket.type}
-                                onChange={(e) => setNewTicket({ ...newTicket, type: e.target.value })}
+                                required
+                                value={newTicket.ticket_type_id}
+                                onChange={(e) => setNewTicket({ ...newTicket, ticket_type_id: e.target.value })}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                             >
-                                <option value="QUESTION">Question</option>
-                                <option value="INCIDENCE">Incidence</option>
-                                <option value="BUG">Bug</option>
-                                <option value="BILLING">Billing</option>
-                                <option value="FEATURE_REQUEST">Feature Request</option>
-                                <option value="OTHER">Other</option>
+                                <option value="">Select a type...</option>
+                                {ticketTypes?.filter(t => t.is_active).map(type => (
+                                    <option key={type.id} value={type.id}>{type.name}</option>
+                                ))}
                             </select>
                         </div>
                     </div>

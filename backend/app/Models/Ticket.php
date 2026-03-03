@@ -18,9 +18,10 @@ class Ticket extends Model
         'queue_id',
         'category_id',
         'subject',
+        'description',
         'status',
         'priority',
-        'type',
+        'ticket_type_id',
         'first_response_at',
         'resolved_at',
         'closed_at',
@@ -29,8 +30,8 @@ class Ticket extends Model
         'sla_first_response_breached',
         'sla_resolution_breached',
         'metadata',
-        'email_message_id',
-        'email_thread_id',
+        'jira_issue_link',
+        'parent_ticket_id',
     ];
 
     protected $casts = [
@@ -72,5 +73,20 @@ class Ticket extends Model
     public function messages()
     {
         return $this->hasMany(TicketMessage::class);
+    }
+
+    public function parent()
+    {
+        return $this->belongsTo(Ticket::class, 'parent_ticket_id');
+    }
+
+    public function children()
+    {
+        return $this->hasMany(Ticket::class, 'parent_ticket_id');
+    }
+
+    public function ticketType()
+    {
+        return $this->belongsTo(TicketType::class);
     }
 }

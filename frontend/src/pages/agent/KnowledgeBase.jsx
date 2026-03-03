@@ -49,7 +49,7 @@ export default function KnowledgeBase() {
     const createMutation = useMutation({
         mutationFn: async (data) => apiClient.post('/kb', data),
         onSuccess: () => {
-            queryClient.invalidateQueries(['kb']);
+            queryClient.invalidateQueries({ queryKey: ['kb'] });
             handleCloseModal();
         },
     });
@@ -57,14 +57,14 @@ export default function KnowledgeBase() {
     const updateMutation = useMutation({
         mutationFn: async ({ id, data }) => apiClient.patch(`/kb/${id}`, data),
         onSuccess: () => {
-            queryClient.invalidateQueries(['kb']);
+            queryClient.invalidateQueries({ queryKey: ['kb'] });
             handleCloseModal();
         },
     });
 
     const deleteMutation = useMutation({
         mutationFn: async (id) => apiClient.delete(`/kb/${id}`),
-        onSuccess: () => queryClient.invalidateQueries(['kb']),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kb'] }),
     });
 
     const handleOpenModal = (article = null) => {

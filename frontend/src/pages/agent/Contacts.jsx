@@ -29,6 +29,7 @@ export default function Contacts() {
     const [importFile, setImportFile] = useState(null);
     const [importLoading, setImportLoading] = useState(false);
     const [importResult, setImportResult] = useState(null);
+    const [isSyncing, setIsSyncing] = useState(false);
 
     const queryClient = useQueryClient();
 
@@ -45,7 +46,7 @@ export default function Contacts() {
             return await apiClient.post('/contacts', data);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(['contacts']);
+            queryClient.invalidateQueries({ queryKey: ['contacts'] });
             setIsModalOpen(false);
             resetForm();
         },
@@ -56,7 +57,7 @@ export default function Contacts() {
             return await apiClient.patch(`/contacts/${id}`, data);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(['contacts']);
+            queryClient.invalidateQueries({ queryKey: ['contacts'] });
             setIsModalOpen(false);
             resetForm();
         },
@@ -67,7 +68,7 @@ export default function Contacts() {
             return await apiClient.delete(`/contacts/${id}`);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(['contacts']);
+            queryClient.invalidateQueries({ queryKey: ['contacts'] });
         },
         onError: (error) => {
             alert(error.response?.data?.message || 'Failed to delete customer');
@@ -151,7 +152,7 @@ export default function Contacts() {
             setImportFile(null);
 
             // Refresh contacts list
-            queryClient.invalidateQueries(['contacts']);
+            queryClient.invalidateQueries({ queryKey: ['contacts'] });
 
             // Close modal after 3 seconds if successful
             if (!response.data.errors || response.data.errors.length === 0) {
@@ -167,6 +168,19 @@ export default function Contacts() {
             });
         } finally {
             setImportLoading(false);
+        }
+    };
+
+    const handleSync = async () => {
+        setIsSyncing(true);
+        try {
+            const response = await apiClient.post('/contacts/sync');
+            queryClient.invalidateQueries({ queryKey: ['contacts'] });
+            alert(`Sync Complete:\nImported: ${response.data.imported}\nUpdated: ${response.data.updated}\nSkipped: ${response.data.skipped}`);
+        } catch (error) {
+            alert('Sync failed: ' + (error.response?.data?.message || 'Unknown error'));
+        } finally {
+            setIsSyncing(false);
         }
     };
 
@@ -200,6 +214,16 @@ export default function Contacts() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                             </svg>
                             Import
+                        </button>
+                        <button
+                            onClick={handleSync}
+                            disabled={isSyncing}
+                            className="px-4 py-2 text-primary-600 bg-white border border-primary-200 font-semibold rounded-lg hover:bg-primary-50 hover:border-primary-300 transition flex items-center disabled:opacity-50"
+                        >
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            {isSyncing ? 'Syncing...' : 'Sync from Intratime'}
                         </button>
                         <button
                             onClick={() => {

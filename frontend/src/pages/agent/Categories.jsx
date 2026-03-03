@@ -98,7 +98,7 @@ export default function Categories() {
     const createMutation = useMutation({
         mutationFn: async (data) => apiClient.post('/categories', data),
         onSuccess: () => {
-            queryClient.invalidateQueries(['categories']);
+            queryClient.invalidateQueries({ queryKey: ['categories'] });
             handleCloseModal();
         },
     });
@@ -106,14 +106,14 @@ export default function Categories() {
     const updateMutation = useMutation({
         mutationFn: async ({ id, data }) => apiClient.patch(`/categories/${id}`, data),
         onSuccess: () => {
-            queryClient.invalidateQueries(['categories']);
+            queryClient.invalidateQueries({ queryKey: ['categories'] });
             handleCloseModal();
         },
     });
 
     const deleteMutation = useMutation({
         mutationFn: async (id) => apiClient.delete(`/categories/${id}`),
-        onSuccess: () => queryClient.invalidateQueries(['categories']),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['categories'] }),
         onError: (err) => alert(err.response?.data?.message || 'Failed to delete'),
     });
 

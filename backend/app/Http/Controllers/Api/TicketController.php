@@ -68,7 +68,7 @@ class TicketController extends Controller
             });
         }
 
-        // For customers, only show their own tickets
+        // For customers, only show their own tickets and NOT child tickets (internal delegation)
         if ($request->user()->role === 'customer') {
             $contact = \App\Models\Contact::where('email', $request->user()->email)
                 ->where('tenant_id', $request->user()->tenant_id)
@@ -78,7 +78,8 @@ class TicketController extends Controller
                 return response()->json(['data' => [], 'total' => 0]);
             }
 
-            $query->where('contact_id', $contact->id);
+            $query->where('contact_id', $contact->id)
+                ->whereNull('parent_ticket_id');
         }
 
         $tickets = $query->orderBy('created_at', 'desc')->paginate(20);
@@ -89,22 +90,43 @@ class TicketController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'subject' => 'required|string|max:255',
+            'subject' => 'required_without:parent_ticket_id|string|max:255',
             'description' => 'required|string',
             'priority' => 'required|in:P1,P2,P3,P4',
-            'type' => 'nullable|in:INCIDENCE,QUESTION,BUG,BILLING,FEATURE_REQUEST,OTHER',
+            'ticket_type_id' => 'nullable|exists:ticket_types,id',
             'contact_id' => 'nullable|exists:contacts,id',
             'category_id' => 'nullable|exists:categories,id',
+            'parent_ticket_id' => 'nullable|exists:tickets,id',
             'attachments' => 'nullable|array',
             'attachments.*.name' => 'required|string',
             'attachments.*.path' => 'required|string',
             'attachments.*.mime_type' => 'required|string',
             'attachments.*.size' => 'required|integer',
+            'user_id' => 'nullable|exists:users,id',
         ]);
 
-        // For customers, create or get their contact record
+        // Subticket Logic
+        $subject = $validated['subject'] ?? null;
+        $status = 'NEW';
         $contactId = $validated['contact_id'] ?? null;
 
+        if (!empty($validated['parent_ticket_id'])) {
+            $parentTicket = Ticket::where('tenant_id', $request->user()->tenant_id)
+                ->findOrFail($validated['parent_ticket_id']);
+
+            // Inherit subject from parent
+            $subject = $parentTicket->subject;
+
+            // Subtickets start as IN_PROGRESS if assigned (which they should be)
+            // But let's trust the default logic or set it here if assigned
+            $status = 'IN_PROGRESS'; // Default for subtickets as they differ from customer tickets
+
+            // Keep contact_id null for internal tickets or maybe link to primary contact? 
+            // Spec says "Subtickets have their own operational data". 
+            // For now, let's leave contact_id as passed or null.
+        }
+
+        // For customers, create or get their contact record
         if ($request->user()->role === 'customer' && !$contactId) {
             // Find or create a contact for this customer user
             $contact = \App\Models\Contact::firstOrCreate(
@@ -119,16 +141,23 @@ class TicketController extends Controller
             $contactId = $contact->id;
         }
 
+        // Check for assignment to set status
+        if (!empty($validated['user_id'])) {
+            $status = 'IN_PROGRESS';
+        }
+
         $ticket = Ticket::create([
             'uuid' => 'TKT-' . strtoupper(Str::random(6)),
             'tenant_id' => $request->user()->tenant_id,
             'contact_id' => $contactId,
-            'subject' => $validated['subject'],
+            'subject' => $subject, // Use determined subject
             'description' => $validated['description'],
-            'status' => 'NEW',
+            'status' => $status, // Use determined status
             'priority' => $validated['priority'],
-            'type' => $validated['type'] ?? 'OTHER',
+            'ticket_type_id' => $validated['ticket_type_id'] ?? null,
             'category_id' => $validated['category_id'] ?? null,
+            'parent_ticket_id' => $validated['parent_ticket_id'] ?? null,
+            'user_id' => $validated['user_id'] ?? null,
             'channel' => 'web',
         ]);
 
@@ -163,12 +192,17 @@ class TicketController extends Controller
 
     public function show(Request $request, $id)
     {
-        $ticket = Ticket::with(['contact', 'user', 'queue', 'messages.user', 'messages.contact', 'messages.attachments'])
+        $ticket = Ticket::with(['contact', 'user', 'queue', 'messages.user', 'messages.contact', 'messages.attachments', 'children.user', 'children.queue'])
             ->where('tenant_id', $request->user()->tenant_id)
             ->findOrFail($id);
 
-        // For customers, only show their own tickets
+        // For customers, only show their own tickets and BLOCK child tickets
         if ($request->user()->role === 'customer') {
+            // Block access if it's a child ticket
+            if ($ticket->parent_ticket_id) {
+                abort(403, 'Unauthorized');
+            }
+
             $contact = \App\Models\Contact::where('email', $request->user()->email)
                 ->where('tenant_id', $request->user()->tenant_id)
                 ->first();
@@ -185,31 +219,38 @@ class TicketController extends Controller
     {
         $ticket = Ticket::where('tenant_id', $request->user()->tenant_id)->findOrFail($id);
 
-        // Only agents can update tickets
-        if ($request->user()->role === 'customer') {
-            abort(403, 'Unauthorized');
-        }
-
         $validated = $request->validate([
-            'status' => 'nullable|in:NEW,OPEN,PENDING_CUSTOMER,IN_PROGRESS,ESCALATED,RESOLVED,CLOSED',
+            'status' => 'nullable|in:NEW,IN_PROGRESS,PENDING_CUSTOMER,RESOLVED',
             'priority' => 'nullable|in:P1,P2,P3,P4',
             'user_id' => 'nullable|exists:users,id',
             'queue_id' => 'nullable|exists:queues,id',
             'category_id' => 'nullable|exists:categories,id',
+            'jira_issue_link' => 'nullable|url',
         ]);
 
-        // Handle status changes for timestamps
+        // Only agents can update tickets, UNLESS customer is marking as RESOLVED
+        if ($request->user()->role === 'customer') {
+            // Customers can ONLY update status to RESOLVED
+            if (count($validated) === 1 && isset($validated['status']) && $validated['status'] === 'RESOLVED') {
+                // Allow
+            } else {
+                abort(403, 'Unauthorized');
+            }
+        }
+
         if (isset($validated['status'])) {
             if ($validated['status'] === 'RESOLVED' && $ticket->status !== 'RESOLVED') {
                 $validated['resolved_at'] = now();
-            } elseif ($validated['status'] === 'CLOSED' && $ticket->status !== 'CLOSED') {
-                $validated['closed_at'] = now();
-                if (!$ticket->resolved_at) {
-                    $validated['resolved_at'] = now();
-                }
-            } elseif (in_array($validated['status'], ['NEW', 'OPEN', 'IN_PROGRESS', 'PENDING_CUSTOMER', 'ESCALATED'])) {
-                // If reopening, clear resolved/closed timestamps? 
-                // Typically yes, or keep history. For now, let's clear them to accurately reflect "current" resolution.
+
+                // Rule A: Parent Resolved => All Subtickets Resolved
+                $ticket->children()->where('status', '!=', 'RESOLVED')->update([
+                    'status' => 'RESOLVED',
+                    'resolved_at' => now(),
+                    // Add logic to log this if needed, but direct update is fastest
+                ]);
+
+            } elseif (in_array($validated['status'], ['NEW', 'IN_PROGRESS', 'PENDING_CUSTOMER'])) {
+                // If reopening or moving to active state, clear resolved timestamp
                 $validated['resolved_at'] = null;
                 $validated['closed_at'] = null;
             }
@@ -217,7 +258,12 @@ class TicketController extends Controller
 
         $ticket->update($validated);
 
-        return response()->json($ticket->load(['contact', 'user', 'queue']));
+        // If assigning user and status is NEW, change to IN_PROGRESS
+        if (isset($validated['user_id']) && $validated['user_id'] && $ticket->status === 'NEW') {
+            $ticket->update(['status' => 'IN_PROGRESS']);
+        }
+
+        return response()->json($ticket->load(['contact', 'user', 'queue', 'children'])); // Reload children to reflect changes if any
     }
 
     public function addMessage(Request $request, $id)
@@ -281,9 +327,19 @@ class TicketController extends Controller
             $ticket->update(['first_response_at' => now()]);
         }
 
-        // Reopen ticket if customer responds and it was closed
-        if ($request->user()->role === 'customer' && in_array($ticket->status, ['RESOLVED', 'CLOSED'])) {
-            $ticket->update(['status' => 'OPEN']);
+        // Status Automation
+        if ($request->user()->role === 'customer') {
+            // Customer reply -> In Progress (action needed)
+            if ($ticket->status !== 'IN_PROGRESS' && $ticket->status !== 'NEW') {
+                $ticket->update(['status' => 'IN_PROGRESS']);
+            }
+        } else {
+            // Agent reply
+            if (!$isInternal) {
+                // Public reply -> Pending Customer
+                $ticket->update(['status' => 'PENDING_CUSTOMER']);
+            }
+            // Internal note -> No status change
         }
 
         return response()->json($message->load(['user', 'contact', 'attachments']), 201);
@@ -303,6 +359,11 @@ class TicketController extends Controller
         ]);
 
         $ticket->update(['user_id' => $validated['user_id']]);
+
+        // Automation: Assign agent -> In Progress
+        if ($validated['user_id'] && $ticket->status === 'NEW') {
+            $ticket->update(['status' => 'IN_PROGRESS']);
+        }
 
         return response()->json($ticket->load(['contact', 'user', 'queue']));
     }

@@ -17,6 +17,7 @@ import Contacts from './pages/agent/Contacts';
 import Agents from './pages/agent/Agents';
 import Categories from './pages/agent/Categories';
 import KnowledgeBase from './pages/agent/KnowledgeBase';
+import TicketTypes from './pages/agent/TicketTypes';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -109,6 +110,11 @@ function App() {
           <Route path="/agent/categories" element={
             <ProtectedRoute allowedRoles={['agent', 'admin']}>
               <Categories />
+            </ProtectedRoute>
+          } />
+          <Route path="/agent/ticket-types" element={
+            <ProtectedRoute allowedRoles={['agent', 'admin']}>
+              <TicketTypes />
             </ProtectedRoute>
           } />
           <Route path="/agent/kb" element={

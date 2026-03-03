@@ -1,0 +1,4187 @@
+{
+	"info": {
+		"_postman_id": "5e3e7a21-38e9-4060-8d5b-364d0d9e013b",
+		"name": "Api Admin",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "3262605",
+		"_collection_link": "https://gold-robot-773877.postman.co/workspace/Intratime-V3~39923513-1b83-48d3-9f88-4e2c0bb39f9e/collection/3262605-5e3e7a21-38e9-4060-8d5b-364d0d9e013b?action=share&source=collection_link&creator=3262605"
+	},
+	"item": [
+		{
+			"name": "Companies",
+			"item": [
+				{
+					"name": "Documents",
+					"item": [
+						{
+							"name": "Index",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/documents",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"documents"
+									],
+									"query": [
+										{
+											"key": "filter[type]",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "filter[master]",
+											"value": "1",
+											"disabled": true
+										},
+										{
+											"key": "filter[date_between]",
+											"value": "2024-02-01,2024-12-31",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/documents/1",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"documents",
+										"1"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Works Centers",
+					"item": [
+						{
+							"name": "Index",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/workcenters",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"workcenters"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/workcenters/2383",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"workcenters",
+										"2383"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Schedule",
+					"item": [
+						{
+							"name": "Index",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/schedules",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"schedules"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/schedules/2",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"schedules",
+										"2"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Departments",
+					"item": [
+						{
+							"name": "Index",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/department",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"department"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/projects/42930",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"projects",
+										"42930"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Projects",
+					"item": [
+						{
+							"name": "Index",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/projects",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"projects"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/projects/9",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"projects",
+										"9"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Clients",
+					"item": [
+						{
+							"name": "Index",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/428/clients",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"428",
+										"clients"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/clients/1",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"clients",
+										"1"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Calendars",
+					"item": [
+						{
+							"name": "Index",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/calendar/",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"calendar",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/calendar/444",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"calendar",
+										"444"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Subscribers",
+					"item": [
+						{
+							"name": "Index",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/14/subscriber/",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"14",
+										"subscriber",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/15/subscriber/3",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"15",
+										"subscriber",
+										"3"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Clocking",
+					"item": [
+						{
+							"name": "Index",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/loginlogout/",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"loginlogout",
+										""
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/15/subscriber/3",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"15",
+										"subscriber",
+										"3"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Devices",
+					"item": [
+						{
+							"name": "Index",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/9242/devices/?include=workcenter",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"9242",
+										"devices",
+										""
+									],
+									"query": [
+										{
+											"key": "include",
+											"value": "workcenter"
+										},
+										{
+											"key": "all",
+											"value": "true",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/15/devices/3",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"15",
+										"devices",
+										"3"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show Copy",
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "POST",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"url": {
+									"raw": "{{admin_url}}api/companies/1/devices/2459/expire-token",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"1",
+										"devices",
+										"2459",
+										"expire-token"
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Estadistics",
+					"item": [
+						{
+							"name": "Show Estadisitics All",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": []
+								},
+								"url": {
+									"raw": "{{admin_url}}api/companies/statistics/all",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"statistics",
+										"all"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show Estadisitics V3",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": []
+								},
+								"url": {
+									"raw": "{{admin_url}}api/companies/statistics/v3",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"statistics",
+										"v3"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show Employee Estadisitics All",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": []
+								},
+								"url": {
+									"raw": "{{admin_url}}api/companies/statistics/employee",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"statistics",
+										"employee"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show Estadistics Intratime",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": []
+								},
+								"url": {
+									"raw": "{{admin_url}}api/companies/statistics/intratime",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"statistics",
+										"intratime"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show Estadistics Conversia360",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": []
+								},
+								"url": {
+									"raw": "{{admin_url}}api/companies/statistics/conversia360",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"statistics",
+										"conversia360"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show Estadistics Conversia25",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": []
+								},
+								"url": {
+									"raw": "{{admin_url}}api/companies/statistics/conversia25",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"statistics",
+										"conversia25"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show Estadistics Conversia22",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": []
+								},
+								"url": {
+									"raw": "{{admin_url}}api/companies/statistics/conversia22",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"statistics",
+										"conversia22"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show Estadistics General",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": []
+								},
+								"url": {
+									"raw": "{{admin_url}}api/companies/statistics/general",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"statistics",
+										"general"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show Estadistics Employees",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": []
+								},
+								"url": {
+									"raw": "{{admin_url}}api/companies/statistics/employees",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"statistics",
+										"employees"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "Show Estadistics Fichajes",
+							"protocolProfileBehavior": {
+								"disableBodyPruning": true
+							},
+							"request": {
+								"auth": {
+									"type": "bearer",
+									"bearer": [
+										{
+											"key": "token",
+											"value": "{{admin_access_token}}",
+											"type": "string"
+										}
+									]
+								},
+								"method": "GET",
+								"header": [
+									{
+										"key": "Accept",
+										"value": "application/json",
+										"type": "text"
+									},
+									{
+										"key": "Content-Type",
+										"value": "application/json",
+										"type": "text"
+									}
+								],
+								"body": {
+									"mode": "urlencoded",
+									"urlencoded": []
+								},
+								"url": {
+									"raw": "{{admin_url}}api/companies/statistics/fichajes?filter[dates_between]=2025-07-01,2025-08-01",
+									"host": [
+										"{{admin_url}}api"
+									],
+									"path": [
+										"companies",
+										"statistics",
+										"fichajes"
+									],
+									"query": [
+										{
+											"key": "filter[dates_between]",
+											"value": "2025-07-01,2025-08-01"
+										},
+										{
+											"key": "filter[company_ids][]",
+											"value": "9242",
+											"disabled": true
+										},
+										{
+											"key": "filter[company_ids][]",
+											"value": "1",
+											"disabled": true
+										}
+									]
+								}
+							},
+							"response": []
+						}
+					]
+				},
+				{
+					"name": "Company Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var response = pm.response.json();\r",
+									"pm.environment.set(\"access_token\", response.data.token);\r",
+									"//pm.environment.set(\"company_id\", companies[0].id);"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{admin_url}}api/auth/company/1/login",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"auth",
+								"company",
+								"1",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Index Copy",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/companies/15/subscriber/",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								"15",
+								"subscriber",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Company Index",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{admin_url}}api/companies/?filter[any]=thaismon",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								""
+							],
+							"query": [
+								{
+									"key": "filter[email]",
+									"value": "winworld",
+									"disabled": true
+								},
+								{
+									"key": "filter[name]",
+									"value": "name",
+									"disabled": true
+								},
+								{
+									"key": "filter[file_date_between]",
+									"value": "2024-09-01,2024-12-31",
+									"disabled": true
+								},
+								{
+									"key": "include",
+									"value": "employees",
+									"disabled": true
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"disabled": true
+								},
+								{
+									"key": "per_page",
+									"value": "10",
+									"disabled": true
+								},
+								{
+									"key": "curren_users",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "filter[id]",
+									"value": "1,262,278,357,415",
+									"disabled": true
+								},
+								{
+									"key": "filter[dates_beetwen]",
+									"value": "2022-09-01,2024-12-31",
+									"disabled": true
+								},
+								{
+									"key": "filter[any]",
+									"value": "thaismon"
+								},
+								{
+									"key": "filter[hired]",
+									"value": "1",
+									"disabled": true
+								},
+								{
+									"key": "filter[isActive]",
+									"value": "1",
+									"description": "0,1",
+									"disabled": true
+								},
+								{
+									"key": "filter[trashed]",
+									"value": "with",
+									"description": "with/only",
+									"disabled": true
+								},
+								{
+									"key": "filter[conversia22]",
+									"value": "1",
+									"disabled": true
+								},
+								{
+									"key": "filter[conversia360]",
+									"value": "true",
+									"disabled": true
+								},
+								{
+									"key": "filter[isDemo]",
+									"value": "1",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "+name",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "+email",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "+mode_sub",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "+source",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "+curren_users",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "+max_users",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "+created_at",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "+active",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "+payment_meth",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "+id",
+									"disabled": true
+								},
+								{
+									"key": "sort",
+									"value": "+deleted_at",
+									"disabled": true
+								},
+								{
+									"key": "filter[payment_method]",
+									"value": "1,2",
+									"disabled": true
+								},
+								{
+									"key": "download",
+									"value": "excel",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Company Show",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{admin_url}}api/companies/68374?include=usersActive",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								"68374"
+							],
+							"query": [
+								{
+									"key": "include",
+									"value": "usersActive",
+									"description": "users,usersCount,usersActive,uscriber,userSubscriber,planSubscription"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Clean Cache",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>Key</th>\r",
+									"        <th>Value</th>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COMPANY_ID</td>\r",
+									"        <td>{{response.BILLING_COMPANY_ID}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_TYPE</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_TYPE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_USERS_QUANTITY</td>\r",
+									"        <td>{{response.BILLING_USERS_QUANTITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CYCLE</td>\r",
+									"        <td>{{response.BILLING_CYCLE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_PLAN</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_PLAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_AMOUNT</td>\r",
+									"        <td>{{response.BILLING_AMOUNT}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ADDRESS</td>\r",
+									"        <td>{{response.BILLING_ADDRESS}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CP</td>\r",
+									"        <td>{{response.BILLING_CP}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CITY</td>\r",
+									"        <td>{{response.BILLING_CITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_STATE</td>\r",
+									"        <td>{{response.BILLING_STATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COUNTRY</td>\r",
+									"        <td>{{response.BILLING_COUNTRY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_IBAN</td>\r",
+									"        <td>{{response.BILLING_IBAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NIF</td>\r",
+									"        <td>{{response.BILLING_NIF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NAME</td>\r",
+									"        <td>{{response.BILLING_NAME}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_TLF</td>\r",
+									"        <td>{{response.BILLING_TLF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_MAIL</td>\r",
+									"        <td>{{response.BILLING_MAIL}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_REGISTER_CREATION_DATE</td>\r",
+									"        <td>{{response.BILLING_REGISTER_CREATION_DATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ID</td>\r",
+									"        <td>{{response.BILLING_ID}}</td>\r",
+									"    </tr>\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return { response: pm.response.json().billing }\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{admin_url}}api/companies/28124/clean_cache",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								"28124",
+								"clean_cache"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Contract",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "plan",
+									"value": "1",
+									"type": "text"
+								},
+								{
+									"key": "users",
+									"value": "1",
+									"type": "text"
+								},
+								{
+									"key": "cycle",
+									"value": "monthly",
+									"description": "monthly, yearly",
+									"type": "text"
+								},
+								{
+									"key": "paymentMethod",
+									"value": "1",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{admin_url}}api/companies/66063/contract",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								"66063",
+								"contract"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Company",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>Key</th>\r",
+									"        <th>Value</th>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COMPANY_ID</td>\r",
+									"        <td>{{response.BILLING_COMPANY_ID}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_TYPE</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_TYPE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_USERS_QUANTITY</td>\r",
+									"        <td>{{response.BILLING_USERS_QUANTITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CYCLE</td>\r",
+									"        <td>{{response.BILLING_CYCLE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_PLAN</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_PLAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_AMOUNT</td>\r",
+									"        <td>{{response.BILLING_AMOUNT}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ADDRESS</td>\r",
+									"        <td>{{response.BILLING_ADDRESS}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CP</td>\r",
+									"        <td>{{response.BILLING_CP}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CITY</td>\r",
+									"        <td>{{response.BILLING_CITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_STATE</td>\r",
+									"        <td>{{response.BILLING_STATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COUNTRY</td>\r",
+									"        <td>{{response.BILLING_COUNTRY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_IBAN</td>\r",
+									"        <td>{{response.BILLING_IBAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NIF</td>\r",
+									"        <td>{{response.BILLING_NIF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NAME</td>\r",
+									"        <td>{{response.BILLING_NAME}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_TLF</td>\r",
+									"        <td>{{response.BILLING_TLF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_MAIL</td>\r",
+									"        <td>{{response.BILLING_MAIL}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_REGISTER_CREATION_DATE</td>\r",
+									"        <td>{{response.BILLING_REGISTER_CREATION_DATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ID</td>\r",
+									"        <td>{{response.BILLING_ID}}</td>\r",
+									"    </tr>\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return { response: pm.response.json().billing }\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "email",
+									"value": "emailDeTest@gmail.com",
+									"type": "text"
+								},
+								{
+									"key": "distributor_id",
+									"value": "7",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{admin_url}}api/companies/68504/updateCompany",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								"68504",
+								"updateCompany"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Liberate Company",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/companies/62288/liberate",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								"62288",
+								"liberate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Deactivate Company",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/companies/1/deactivate",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								"1",
+								"deactivate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Reactivate Company",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "email",
+									"value": "winworld@winworld.es",
+									"type": "text"
+								},
+								{
+									"key": "cif",
+									"value": "B61545455",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{admin_url}}api/companies/1/reactivate",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								"1",
+								"reactivate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Register Company Action",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "type",
+									"value": "deactivateCompany",
+									"type": "text"
+								},
+								{
+									"key": "details",
+									"value": "Deactivated through Panel Admin",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{admin_url}}api/companies/62288/register_company_action",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								"62288",
+								"register_company_action"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Undo Libearate Company",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/companies/64080/undo_liberate?email=info@avcanarias.pro&cif=A39032669",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								"64080",
+								"undo_liberate"
+							],
+							"query": [
+								{
+									"key": "email",
+									"value": "info@avcanarias.pro"
+								},
+								{
+									"key": "cif",
+									"value": "A39032669"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Company Show Copy",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": []
+						},
+						"url": {
+							"raw": "{{admin_url}}api/companies/intratime",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"companies",
+								"intratime"
+							],
+							"query": [
+								{
+									"key": "filter%5Bhired%5D",
+									"value": "true",
+									"disabled": true
+								},
+								{
+									"key": "filter%5BisActive%5D",
+									"value": "1",
+									"disabled": true
+								},
+								{
+									"key": "page",
+									"value": "1",
+									"disabled": true
+								},
+								{
+									"key": "per_page",
+									"value": "25 ",
+									"disabled": true
+								},
+								{
+									"key": "filter[dates_beetwen]",
+									"value": "2023-08-29",
+									"description": "users,usersCount,usersActive,uscriber,userSubscriber,planSubscription",
+									"disabled": true
+								},
+								{
+									"key": "filter[conversia22]",
+									"value": "1",
+									"disabled": true
+								},
+								{
+									"key": "filter[isDemo]",
+									"value": "1",
+									"disabled": true
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Admins",
+			"item": [
+				{
+					"name": "Index Users",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/admins/",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"admins",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Show User",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/admins/2",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"admins",
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>Key</th>\r",
+									"        <th>Value</th>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COMPANY_ID</td>\r",
+									"        <td>{{response.BILLING_COMPANY_ID}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_TYPE</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_TYPE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_USERS_QUANTITY</td>\r",
+									"        <td>{{response.BILLING_USERS_QUANTITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CYCLE</td>\r",
+									"        <td>{{response.BILLING_CYCLE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_PLAN</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_PLAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_AMOUNT</td>\r",
+									"        <td>{{response.BILLING_AMOUNT}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ADDRESS</td>\r",
+									"        <td>{{response.BILLING_ADDRESS}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CP</td>\r",
+									"        <td>{{response.BILLING_CP}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CITY</td>\r",
+									"        <td>{{response.BILLING_CITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_STATE</td>\r",
+									"        <td>{{response.BILLING_STATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COUNTRY</td>\r",
+									"        <td>{{response.BILLING_COUNTRY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_IBAN</td>\r",
+									"        <td>{{response.BILLING_IBAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NIF</td>\r",
+									"        <td>{{response.BILLING_NIF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NAME</td>\r",
+									"        <td>{{response.BILLING_NAME}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_TLF</td>\r",
+									"        <td>{{response.BILLING_TLF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_MAIL</td>\r",
+									"        <td>{{response.BILLING_MAIL}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_REGISTER_CREATION_DATE</td>\r",
+									"        <td>{{response.BILLING_REGISTER_CREATION_DATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ID</td>\r",
+									"        <td>{{response.BILLING_ID}}</td>\r",
+									"    </tr>\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return { response: pm.response.json().billing }\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "email",
+									"value": "daniel@daniel.com",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "123456",
+									"type": "text"
+								},
+								{
+									"key": "role",
+									"value": "admin",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{admin_url}}api/admins",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"admins"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>Key</th>\r",
+									"        <th>Value</th>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COMPANY_ID</td>\r",
+									"        <td>{{response.BILLING_COMPANY_ID}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_TYPE</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_TYPE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_USERS_QUANTITY</td>\r",
+									"        <td>{{response.BILLING_USERS_QUANTITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CYCLE</td>\r",
+									"        <td>{{response.BILLING_CYCLE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_PLAN</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_PLAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_AMOUNT</td>\r",
+									"        <td>{{response.BILLING_AMOUNT}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ADDRESS</td>\r",
+									"        <td>{{response.BILLING_ADDRESS}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CP</td>\r",
+									"        <td>{{response.BILLING_CP}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CITY</td>\r",
+									"        <td>{{response.BILLING_CITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_STATE</td>\r",
+									"        <td>{{response.BILLING_STATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COUNTRY</td>\r",
+									"        <td>{{response.BILLING_COUNTRY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_IBAN</td>\r",
+									"        <td>{{response.BILLING_IBAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NIF</td>\r",
+									"        <td>{{response.BILLING_NIF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NAME</td>\r",
+									"        <td>{{response.BILLING_NAME}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_TLF</td>\r",
+									"        <td>{{response.BILLING_TLF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_MAIL</td>\r",
+									"        <td>{{response.BILLING_MAIL}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_REGISTER_CREATION_DATE</td>\r",
+									"        <td>{{response.BILLING_REGISTER_CREATION_DATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ID</td>\r",
+									"        <td>{{response.BILLING_ID}}</td>\r",
+									"    </tr>\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return { response: pm.response.json().billing }\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "email",
+									"value": "daniel@daniel.com",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "password",
+									"value": "123456",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "role",
+									"value": "support",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{admin_url}}api/admins/8",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"admins",
+								"8"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Destroy User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>Key</th>\r",
+									"        <th>Value</th>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COMPANY_ID</td>\r",
+									"        <td>{{response.BILLING_COMPANY_ID}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_TYPE</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_TYPE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_USERS_QUANTITY</td>\r",
+									"        <td>{{response.BILLING_USERS_QUANTITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CYCLE</td>\r",
+									"        <td>{{response.BILLING_CYCLE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_PLAN</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_PLAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_AMOUNT</td>\r",
+									"        <td>{{response.BILLING_AMOUNT}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ADDRESS</td>\r",
+									"        <td>{{response.BILLING_ADDRESS}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CP</td>\r",
+									"        <td>{{response.BILLING_CP}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CITY</td>\r",
+									"        <td>{{response.BILLING_CITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_STATE</td>\r",
+									"        <td>{{response.BILLING_STATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COUNTRY</td>\r",
+									"        <td>{{response.BILLING_COUNTRY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_IBAN</td>\r",
+									"        <td>{{response.BILLING_IBAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NIF</td>\r",
+									"        <td>{{response.BILLING_NIF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NAME</td>\r",
+									"        <td>{{response.BILLING_NAME}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_TLF</td>\r",
+									"        <td>{{response.BILLING_TLF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_MAIL</td>\r",
+									"        <td>{{response.BILLING_MAIL}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_REGISTER_CREATION_DATE</td>\r",
+									"        <td>{{response.BILLING_REGISTER_CREATION_DATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ID</td>\r",
+									"        <td>{{response.BILLING_ID}}</td>\r",
+									"    </tr>\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return { response: pm.response.json().billing }\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/admins/8",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"admins",
+								"8"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Restore User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>Key</th>\r",
+									"        <th>Value</th>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COMPANY_ID</td>\r",
+									"        <td>{{response.BILLING_COMPANY_ID}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_TYPE</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_TYPE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_USERS_QUANTITY</td>\r",
+									"        <td>{{response.BILLING_USERS_QUANTITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CYCLE</td>\r",
+									"        <td>{{response.BILLING_CYCLE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_PLAN</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_PLAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_AMOUNT</td>\r",
+									"        <td>{{response.BILLING_AMOUNT}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ADDRESS</td>\r",
+									"        <td>{{response.BILLING_ADDRESS}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CP</td>\r",
+									"        <td>{{response.BILLING_CP}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CITY</td>\r",
+									"        <td>{{response.BILLING_CITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_STATE</td>\r",
+									"        <td>{{response.BILLING_STATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COUNTRY</td>\r",
+									"        <td>{{response.BILLING_COUNTRY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_IBAN</td>\r",
+									"        <td>{{response.BILLING_IBAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NIF</td>\r",
+									"        <td>{{response.BILLING_NIF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NAME</td>\r",
+									"        <td>{{response.BILLING_NAME}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_TLF</td>\r",
+									"        <td>{{response.BILLING_TLF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_MAIL</td>\r",
+									"        <td>{{response.BILLING_MAIL}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_REGISTER_CREATION_DATE</td>\r",
+									"        <td>{{response.BILLING_REGISTER_CREATION_DATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ID</td>\r",
+									"        <td>{{response.BILLING_ID}}</td>\r",
+									"    </tr>\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return { response: pm.response.json().billing }\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/admins/8/restore",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"admins",
+								"8",
+								"restore"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Distributors",
+			"item": [
+				{
+					"name": "Index Users",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/distributors/",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"distributors",
+								""
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Show User",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/distributors/1",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"distributors",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>Key</th>\r",
+									"        <th>Value</th>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COMPANY_ID</td>\r",
+									"        <td>{{response.BILLING_COMPANY_ID}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_TYPE</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_TYPE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_USERS_QUANTITY</td>\r",
+									"        <td>{{response.BILLING_USERS_QUANTITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CYCLE</td>\r",
+									"        <td>{{response.BILLING_CYCLE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_PLAN</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_PLAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_AMOUNT</td>\r",
+									"        <td>{{response.BILLING_AMOUNT}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ADDRESS</td>\r",
+									"        <td>{{response.BILLING_ADDRESS}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CP</td>\r",
+									"        <td>{{response.BILLING_CP}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CITY</td>\r",
+									"        <td>{{response.BILLING_CITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_STATE</td>\r",
+									"        <td>{{response.BILLING_STATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COUNTRY</td>\r",
+									"        <td>{{response.BILLING_COUNTRY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_IBAN</td>\r",
+									"        <td>{{response.BILLING_IBAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NIF</td>\r",
+									"        <td>{{response.BILLING_NIF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NAME</td>\r",
+									"        <td>{{response.BILLING_NAME}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_TLF</td>\r",
+									"        <td>{{response.BILLING_TLF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_MAIL</td>\r",
+									"        <td>{{response.BILLING_MAIL}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_REGISTER_CREATION_DATE</td>\r",
+									"        <td>{{response.BILLING_REGISTER_CREATION_DATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ID</td>\r",
+									"        <td>{{response.BILLING_ID}}</td>\r",
+									"    </tr>\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return { response: pm.response.json().billing }\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "email",
+									"value": "daniel3@daniel3.com",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "123456",
+									"type": "text"
+								},
+								{
+									"key": "role",
+									"value": "admin",
+									"type": "text"
+								},
+								{
+									"key": "code",
+									"value": "123",
+									"type": "text"
+								},
+								{
+									"key": "name",
+									"value": "distribuidor4",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{admin_url}}api/distributors",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"distributors"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>Key</th>\r",
+									"        <th>Value</th>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COMPANY_ID</td>\r",
+									"        <td>{{response.BILLING_COMPANY_ID}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_TYPE</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_TYPE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_USERS_QUANTITY</td>\r",
+									"        <td>{{response.BILLING_USERS_QUANTITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CYCLE</td>\r",
+									"        <td>{{response.BILLING_CYCLE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_PLAN</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_PLAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_AMOUNT</td>\r",
+									"        <td>{{response.BILLING_AMOUNT}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ADDRESS</td>\r",
+									"        <td>{{response.BILLING_ADDRESS}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CP</td>\r",
+									"        <td>{{response.BILLING_CP}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CITY</td>\r",
+									"        <td>{{response.BILLING_CITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_STATE</td>\r",
+									"        <td>{{response.BILLING_STATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COUNTRY</td>\r",
+									"        <td>{{response.BILLING_COUNTRY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_IBAN</td>\r",
+									"        <td>{{response.BILLING_IBAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NIF</td>\r",
+									"        <td>{{response.BILLING_NIF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NAME</td>\r",
+									"        <td>{{response.BILLING_NAME}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_TLF</td>\r",
+									"        <td>{{response.BILLING_TLF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_MAIL</td>\r",
+									"        <td>{{response.BILLING_MAIL}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_REGISTER_CREATION_DATE</td>\r",
+									"        <td>{{response.BILLING_REGISTER_CREATION_DATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ID</td>\r",
+									"        <td>{{response.BILLING_ID}}</td>\r",
+									"    </tr>\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return { response: pm.response.json().billing }\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "email",
+									"value": "conversia@mail.com",
+									"type": "text"
+								},
+								{
+									"key": "password",
+									"value": "123456",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "role",
+									"value": "support",
+									"type": "text",
+									"disabled": true
+								},
+								{
+									"key": "code",
+									"value": "123",
+									"type": "text"
+								},
+								{
+									"key": "name",
+									"value": "conversia 360",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{admin_url}}api/distributors/1",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"distributors",
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Destroy User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>Key</th>\r",
+									"        <th>Value</th>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COMPANY_ID</td>\r",
+									"        <td>{{response.BILLING_COMPANY_ID}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_TYPE</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_TYPE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_USERS_QUANTITY</td>\r",
+									"        <td>{{response.BILLING_USERS_QUANTITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CYCLE</td>\r",
+									"        <td>{{response.BILLING_CYCLE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_PLAN</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_PLAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_AMOUNT</td>\r",
+									"        <td>{{response.BILLING_AMOUNT}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ADDRESS</td>\r",
+									"        <td>{{response.BILLING_ADDRESS}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CP</td>\r",
+									"        <td>{{response.BILLING_CP}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CITY</td>\r",
+									"        <td>{{response.BILLING_CITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_STATE</td>\r",
+									"        <td>{{response.BILLING_STATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COUNTRY</td>\r",
+									"        <td>{{response.BILLING_COUNTRY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_IBAN</td>\r",
+									"        <td>{{response.BILLING_IBAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NIF</td>\r",
+									"        <td>{{response.BILLING_NIF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NAME</td>\r",
+									"        <td>{{response.BILLING_NAME}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_TLF</td>\r",
+									"        <td>{{response.BILLING_TLF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_MAIL</td>\r",
+									"        <td>{{response.BILLING_MAIL}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_REGISTER_CREATION_DATE</td>\r",
+									"        <td>{{response.BILLING_REGISTER_CREATION_DATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ID</td>\r",
+									"        <td>{{response.BILLING_ID}}</td>\r",
+									"    </tr>\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return { response: pm.response.json().billing }\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/distributors/8",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"distributors",
+								"8"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Restore User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var template = `\r",
+									"<style type=\"text/css\">\r",
+									"    .tftable {font-size:14px;color:#333333;width:100%;border-width: 1px;border-color: #87ceeb;border-collapse: collapse;}\r",
+									"    .tftable th {font-size:18px;background-color:#87ceeb;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;text-align:left;}\r",
+									"    .tftable tr {background-color:#ffffff;}\r",
+									"    .tftable td {font-size:14px;border-width: 1px;padding: 8px;border-style: solid;border-color: #87ceeb;}\r",
+									"    .tftable tr:hover {background-color:#e0ffff;}\r",
+									"</style>\r",
+									"\r",
+									"<table class=\"tftable\" border=\"1\">\r",
+									"    <tr>\r",
+									"        <th>Key</th>\r",
+									"        <th>Value</th>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COMPANY_ID</td>\r",
+									"        <td>{{response.BILLING_COMPANY_ID}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_TYPE</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_TYPE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_USERS_QUANTITY</td>\r",
+									"        <td>{{response.BILLING_USERS_QUANTITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CYCLE</td>\r",
+									"        <td>{{response.BILLING_CYCLE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_SUBSCRIPTION_PLAN</td>\r",
+									"        <td>{{response.BILLING_SUBSCRIPTION_PLAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_AMOUNT</td>\r",
+									"        <td>{{response.BILLING_AMOUNT}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ADDRESS</td>\r",
+									"        <td>{{response.BILLING_ADDRESS}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CP</td>\r",
+									"        <td>{{response.BILLING_CP}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_CITY</td>\r",
+									"        <td>{{response.BILLING_CITY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_STATE</td>\r",
+									"        <td>{{response.BILLING_STATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_COUNTRY</td>\r",
+									"        <td>{{response.BILLING_COUNTRY}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_IBAN</td>\r",
+									"        <td>{{response.BILLING_IBAN}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NIF</td>\r",
+									"        <td>{{response.BILLING_NIF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_NAME</td>\r",
+									"        <td>{{response.BILLING_NAME}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_TLF</td>\r",
+									"        <td>{{response.BILLING_TLF}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_MAIL</td>\r",
+									"        <td>{{response.BILLING_MAIL}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_REGISTER_CREATION_DATE</td>\r",
+									"        <td>{{response.BILLING_REGISTER_CREATION_DATE}}</td>\r",
+									"    </tr>\r",
+									"    <tr>\r",
+									"        <td>BILLING_ID</td>\r",
+									"        <td>{{response.BILLING_ID}}</td>\r",
+									"    </tr>\r",
+									"</table>\r",
+									"`;\r",
+									"\r",
+									"function constructVisualizerPayload() {\r",
+									"    return { response: pm.response.json().billing }\r",
+									"}\r",
+									"\r",
+									"pm.visualizer.set(template, constructVisualizerPayload());\r",
+									""
+								],
+								"type": "text/javascript",
+								"packages": {}
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/distributors/8/restore",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"distributors",
+								"8",
+								"restore"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Employees",
+			"item": [
+				{
+					"name": "Index",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/employees",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"employees"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Show",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{admin_access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{admin_url}}api/employees/?filter[id]",
+							"host": [
+								"{{admin_url}}api"
+							],
+							"path": [
+								"employees",
+								""
+							],
+							"query": [
+								{
+									"key": "filter[id]",
+									"value": null
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Login",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var response = pm.response.json();\r",
+							"pm.environment.set(\"admin_access_token\", response.data.token);"
+						],
+						"type": "text/javascript",
+						"packages": {},
+						"requests": {}
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "email",
+							"value": "joberg@winworld.es",
+							"type": "text"
+						},
+						{
+							"key": "password",
+							"value": "W3nw4rld$%&",
+							"type": "text"
+						},
+						{
+							"key": "device",
+							"value": "postman",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{admin_url}}api/auth/login",
+					"host": [
+						"{{admin_url}}api"
+					],
+					"path": [
+						"auth",
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Check Token",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{admin_access_token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{admin_url}}api/auth/check-token",
+					"host": [
+						"{{admin_url}}api"
+					],
+					"path": [
+						"auth",
+						"check-token"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Current",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{admin_access_token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{admin_url}}api/auth/check-token",
+					"host": [
+						"{{admin_url}}api"
+					],
+					"path": [
+						"auth",
+						"check-token"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Logout",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{admin_access_token}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{admin_url}}api/auth/logout",
+					"host": [
+						"{{admin_url}}api"
+					],
+					"path": [
+						"auth",
+						"logout"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

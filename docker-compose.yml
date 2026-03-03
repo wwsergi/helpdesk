@@ -22,6 +22,23 @@ services:
             timeout: 5s
             retries: 5
 
+    phpmyadmin:
+        image: phpmyadmin/phpmyadmin
+        links:
+            - mysql:db
+        ports:
+            - 8080:80
+        environment:
+            PMA_HOST: mysql
+            PMA_PORT: 3306
+            PMA_USER: '${DB_USERNAME}'
+            PMA_PASSWORD: '${DB_PASSWORD}'
+            UPLOAD_LIMIT: 64M
+        networks:
+            - helpdesk-network
+        depends_on:
+            - mysql
+
     backend:
         build:
             context: ./backend
@@ -39,13 +56,17 @@ services:
             DB_DATABASE: helpdesk
             DB_USERNAME: helpdesk_user
             DB_PASSWORD: helpdesk_password_change_me
+            SESSION_DRIVER: file
+            CACHE_DRIVER: file
+            QUEUE_CONNECTION: sync
         # ports:
         #     - "8000:80"
         depends_on:
             mysql:
                 condition: service_healthy
         volumes:
-            - ./backend/storage:/var/www/html/storage
+            - ./backend:/var/www/html
+            # - ./backend/storage:/var/www/html/storage
         networks:
             - helpdesk-network
 
@@ -54,11 +75,11 @@ services:
             context: ./frontend
             dockerfile: Dockerfile
             args:
-                VITE_API_URL: https://localhost/api
+                VITE_API_URL: /api
         container_name: helpdesk-frontend
         restart: unless-stopped
-        # ports:
-        #     - "80:80"
+        ports:
+            - "3000:80"
         depends_on:
             - backend
         networks:

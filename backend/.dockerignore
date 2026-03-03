@@ -2,7 +2,7 @@ vendor
 node_modules
 .git
 .env
-storage
+
 .DS_Store
 **/.DS_Store
 bootstrap/cache/*.php

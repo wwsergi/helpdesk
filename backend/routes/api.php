@@ -23,6 +23,8 @@ Route::get('/info', function () {
     ]);
 });
 
+
+
 // Auth routes
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/auth/register', [AuthController::class, 'register']);
@@ -79,6 +81,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/kb/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'show']);
     Route::patch('/kb/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'update']);
     Route::delete('/kb/{id}', [\App\Http\Controllers\Api\KnowledgeBaseController::class, 'destroy']);
+
+    // Ticket Types
+    Route::apiResource('/ticket-types', \App\Http\Controllers\Api\TicketTypeController::class);
 
     // Reports (Admin only)
     Route::middleware('admin')->prefix('reports')->group(function () {

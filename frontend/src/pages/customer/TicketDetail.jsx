@@ -26,7 +26,7 @@ export default function CustomerTicketDetail() {
             return await apiClient.post(`/tickets/${id}/messages`, data);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(['customer-ticket', id]);
+            queryClient.invalidateQueries({ queryKey: ['customer-ticket', id] });
             setReplyText('');
             setFiles([]);
         },
@@ -62,6 +62,23 @@ export default function CustomerTicketDetail() {
             setIsUploading(false);
             alert('Error uploading files: ' + (error.response?.data?.message || error.message));
         }
+    };
+
+    const updateTicketMutation = useMutation({
+        mutationFn: async (data) => {
+            return await apiClient.patch(`/tickets/${id}`, data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['customer-ticket', id] });
+            alert('Ticket marked as resolved.');
+        },
+        onError: (error) => {
+            alert('Error updating ticket: ' + (error.response?.data?.message || error.message));
+        }
+    });
+
+    const resolveTicket = () => {
+        updateTicketMutation.mutate({ status: 'RESOLVED' });
     };
 
     if (isLoading) {
@@ -118,9 +135,33 @@ export default function CustomerTicketDetail() {
                                     <div className="text-sm font-medium opacity-90">Status</div>
                                     <div className="text-2xl font-bold mt-1">{ticket.status.replace('_', ' ')}</div>
                                 </div>
-                                <div className="text-right">
-                                    <div className="text-sm font-medium opacity-90">Priority</div>
-                                    <div className="text-2xl font-bold mt-1">{ticket.priority}</div>
+                                <div className="flex items-center space-x-6">
+                                    <div className="text-right">
+                                        <div className="text-sm font-medium opacity-90">Priority</div>
+                                        <div className="text-2xl font-bold mt-1">{ticket.priority}</div>
+                                    </div>
+
+                                    {/* Mark as Resolved Button */}
+                                    {ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED' && (
+                                        <button
+                                            onClick={() => {
+                                                if (window.confirm('Are you sure you want to mark this ticket as resolved?')) {
+                                                    // Use existing replyMutation or create a new update mutation?
+                                                    // TicketDetail usually only has reply, fetching.
+                                                    // I need to add an update mutation or use apiClient.
+                                                    // Let's add updateMutation if not present, but I can't add hooks inside check.
+                                                    // I need to add logic outside.
+                                                    resolveTicket();
+                                                }
+                                            }}
+                                            className="bg-white/20 hover:bg-white/30 text-white border border-white/40 px-4 py-2 rounded-lg font-semibold transition text-sm flex items-center"
+                                        >
+                                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            Mark as Resolved
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         </div>

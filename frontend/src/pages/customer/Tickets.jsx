@@ -8,11 +8,9 @@ import FileUpload from '../../components/FileUpload';
 
 const STATUS_COLORS = {
     NEW: 'bg-blue-100 text-blue-800',
-    OPEN: 'bg-green-100 text-green-800',
     IN_PROGRESS: 'bg-yellow-100 text-yellow-800',
     PENDING_CUSTOMER: 'bg-purple-100 text-purple-800',
-    RESOLVED: 'bg-gray-100 text-gray-800',
-    CLOSED: 'bg-gray-100 text-gray-600',
+    RESOLVED: 'bg-green-100 text-green-800',
 };
 
 const PRIORITY_COLORS = {
@@ -73,7 +71,7 @@ export default function CustomerTickets() {
             return await apiClient.post('/tickets', data);
         },
         onSuccess: () => {
-            queryClient.invalidateQueries(['customer-tickets']);
+            queryClient.invalidateQueries({ queryKey: ['customer-tickets'] });
             setShowCreateModal(false);
             setFormData({ subject: '', description: '', priority: 'P3', category_id: '', attachment_ids: [] });
             setFiles([]);
@@ -118,18 +116,16 @@ export default function CustomerTickets() {
 
     // Filter tickets based on selected status
     const filteredTickets = statusFilter
-        ? statusFilter === 'OPEN'
-            ? tickets.filter((ticket) => ticket.status === 'OPEN' || ticket.status === 'IN_PROGRESS')
-            : statusFilter === 'RESOLVED'
-                ? tickets.filter((ticket) => ticket.status === 'RESOLVED' || ticket.status === 'CLOSED')
-                : tickets.filter((ticket) => ticket.status === statusFilter)
+        ? statusFilter === 'IN_PROGRESS'
+            ? tickets.filter((ticket) => ticket.status === 'IN_PROGRESS' || ticket.status === 'OPEN')
+            : tickets.filter((ticket) => ticket.status === statusFilter)
         : tickets;
 
     // Calculate KPI stats
     const stats = {
         all: tickets.length,
         new: tickets.filter((t) => t.status === 'NEW').length,
-        open: tickets.filter((t) => t.status === 'OPEN' || t.status === 'IN_PROGRESS').length,
+        in_progress: tickets.filter((t) => t.status === 'IN_PROGRESS' || t.status === 'OPEN').length,
         pending: tickets.filter((t) => t.status === 'PENDING_CUSTOMER').length,
         resolved: tickets.filter((t) => t.status === 'RESOLVED' || t.status === 'CLOSED').length,
     };
@@ -187,14 +183,14 @@ export default function CustomerTickets() {
                     </button>
 
                     <button
-                        onClick={() => setStatusFilter('OPEN')}
-                        className={`p-4 rounded-lg border-2 transition-all text-left ${statusFilter === 'OPEN'
-                            ? 'border-green-600 bg-green-50 shadow-md'
+                        onClick={() => setStatusFilter('IN_PROGRESS')}
+                        className={`p-4 rounded-lg border-2 transition-all text-left ${statusFilter === 'IN_PROGRESS'
+                            ? 'border-yellow-600 bg-yellow-50 shadow-md'
                             : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
                             }`}
                     >
-                        <div className="text-2xl font-bold text-green-600">{stats.open}</div>
-                        <div className="text-sm text-gray-600 mt-1">Open</div>
+                        <div className="text-2xl font-bold text-yellow-600">{stats.in_progress}</div>
+                        <div className="text-sm text-gray-600 mt-1">In Progress</div>
                     </button>
 
                     <button
@@ -211,7 +207,7 @@ export default function CustomerTickets() {
                     <button
                         onClick={() => setStatusFilter('RESOLVED')}
                         className={`p-4 rounded-lg border-2 transition-all text-left ${statusFilter === 'RESOLVED'
-                            ? 'border-gray-600 bg-gray-50 shadow-md'
+                            ? 'border-green-600 bg-green-50 shadow-md'
                             : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
                             }`}
                     >
