@@ -7,6 +7,8 @@ use App\Models\Contact;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Password;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
@@ -24,7 +26,8 @@ class ContactController extends Controller
             });
         }
 
-        return response()->json($query->orderBy('name')->get());
+        $perPage = $request->input('per_page', 50);
+        return response()->json($query->orderBy('name')->paginate($perPage));
     }
 
     public function store(Request $request)
@@ -245,5 +248,107 @@ class ContactController extends Controller
                 'message' => 'Import failed: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    public function sync(Request $request)
+    {
+        $adminUrl = config('services.intratime.admin_url');
+        $adminToken = config('services.intratime.admin_token');
+
+        if (!$adminUrl || !$adminToken) {
+            return response()->json(['message' => 'Intratime API credentials are not configured.'], 500);
+        }
+
+        $adminUrl = rtrim($adminUrl, '/');
+
+        $page = 1;
+        $imported = 0;
+        $updated = 0;
+        $skipped = 0;
+
+        try {
+            do {
+                $response = Http::withToken($adminToken)
+                    ->acceptJson()
+                    ->get("{$adminUrl}/api/companies", [
+                        'page' => $page,
+                        'per_page' => 200,
+                        //'filter[isDemo]' => 'false',
+                        'filter[payment_method]' => '1,2,3,4'
+                    ]);
+
+                if (!$response->successful()) {
+                    Log::error('Intratime Sync Error: ' . $response->body());
+                    return response()->json(['message' => 'Failed to fetch companies from Intratime API'], 500);
+                }
+
+                $data = $response->json();
+
+                // Handle different API response structures (paginated vs array list)
+                $companies = isset($data['data']) ? $data['data'] : (isset($data['items']) ? $data['items'] : $data);
+
+                if (empty($companies) || !is_array($companies)) {
+                    break;
+                }
+
+                foreach ($companies as $company) {
+                    $tenantId = $request->user()->tenant_id;
+                    $externalId = (string) ($company['unique_id'] ?? $company['id'] ?? '');
+
+                    // Skip companies without IDs
+                    if (!$externalId) {
+                        $skipped++;
+                        continue;
+                    }
+
+                    $contactData = [
+                        'tenant_id' => $tenantId,
+                        'name' => $company['name'] ?? 'Unknown Company',
+                        'email' => $company['email'] ?? null,
+                        'cif' => $company['cif'] ?? null,
+                        'phone' => $company['phone'] ?? null,
+                        'subscription_plan' => $company['plan'] ?? null,
+                        'max_users' => $company['max_users'] ?? null,
+                        'active' => $company['active'] ?? true,
+                        'billing_mode' => $company['cycle'] ?? null,
+                        'distributor_id' => $company['distributor_id'] ?? null,
+                    ];
+
+                    $existing = Contact::where('tenant_id', $tenantId)
+                        ->where('external_id', $externalId)
+                        ->first();
+
+                    if ($existing) {
+                        $existing->update($contactData);
+                        $updated++;
+                    } else {
+                        $contactData['external_id'] = $externalId;
+                        Contact::create($contactData);
+                        $imported++;
+                    }
+                }
+
+                $lastPage = 1;
+                if (isset($data['meta']['last_page'])) {
+                    $lastPage = $data['meta']['last_page'];
+                } elseif (isset($data['last_page'])) {
+                    $lastPage = $data['last_page'];
+                }
+
+                $page++;
+
+            } while ($page <= $lastPage);
+
+        } catch (\Exception $e) {
+            Log::error('Intratime Sync Exception: ' . $e->getMessage());
+            return response()->json(['message' => 'An error occurred during sync.'], 500);
+        }
+
+        return response()->json([
+            'message' => 'Sync completed successfully.',
+            'imported' => $imported,
+            'updated' => $updated,
+            'skipped' => $skipped,
+        ]);
     }
 }

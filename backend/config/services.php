@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'intratime' => [
+        'admin_url' => env('INTRATIME_ADMIN_URL'),
+        'admin_token' => env('INTRATIME_ADMIN_TOKEN'),
+    ],
+
 ];

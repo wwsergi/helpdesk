@@ -53,6 +53,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/contacts', [\App\Http\Controllers\Api\ContactController::class, 'index']);
     Route::post('/contacts', [\App\Http\Controllers\Api\ContactController::class, 'store']);
     Route::post('/contacts/import', [\App\Http\Controllers\Api\ContactController::class, 'import']);
+    Route::post('/contacts/sync', [\App\Http\Controllers\Api\ContactController::class, 'sync']);
     Route::get('/contacts/{id}', [\App\Http\Controllers\Api\ContactController::class, 'show']);
     Route::patch('/contacts/{id}', [\App\Http\Controllers\Api\ContactController::class, 'update']);
     Route::delete('/contacts/{id}', [\App\Http\Controllers\Api\ContactController::class, 'destroy']);

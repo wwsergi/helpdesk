@@ -8,6 +8,8 @@ import AgentLayout from '../../components/agent/AgentLayout';
 export default function Contacts() {
     const { logout } = useAuthStore();
     const [searchQuery, setSearchQuery] = useState('');
+    const [page, setPage] = useState(1);
+    const [perPage, setPerPage] = useState(50);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingContact, setEditingContact] = useState(null);
     const [formData, setFormData] = useState({
@@ -34,12 +36,15 @@ export default function Contacts() {
     const queryClient = useQueryClient();
 
     const { data: contacts, isLoading } = useQuery({
-        queryKey: ['contacts', searchQuery],
+        queryKey: ['contacts', searchQuery, page, perPage],
         queryFn: async () => {
-            const response = await apiClient.get(`/contacts?search=${searchQuery}`);
+            const response = await apiClient.get(`/contacts?search=${searchQuery}&page=${page}&per_page=${perPage}`);
             return response.data;
         },
     });
+
+    const contactList = Array.isArray(contacts) ? contacts : (Array.isArray(contacts?.data) ? contacts.data : []);
+    const paginationData = contacts && !Array.isArray(contacts) && contacts.data ? contacts : null;
 
     const createMutation = useMutation({
         mutationFn: async (data) => {
@@ -194,7 +199,10 @@ export default function Contacts() {
                             type="text"
                             placeholder="Search by name or email..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e) => {
+                                setSearchQuery(e.target.value);
+                                setPage(1);
+                            }}
                             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent transition"
                         />
                         <svg className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -248,28 +256,33 @@ export default function Contacts() {
                             <tr>
                                 <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                 <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-                                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">External ID</th>
+                                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Phone</th>
+                                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Plan</th>
+                                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">Users (Max)</th>
+                                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden xl:table-cell">Billing</th>
+                                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Distributor</th>
+                                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Ext. ID</th>
                                 <th className="px-2 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan="5" className="px-2 py-4 text-center">
+                                    <td colSpan="10" className="px-2 py-4 text-center">
                                         <div className="flex justify-center">
                                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
                                         </div>
                                     </td>
                                 </tr>
-                            ) : contacts?.length === 0 ? (
+                            ) : contactList.length === 0 ? (
                                 <tr>
-                                    <td colSpan="5" className="px-2 py-12 text-center text-gray-500">
+                                    <td colSpan="10" className="px-2 py-12 text-center text-gray-500">
                                         No customers found
                                     </td>
                                 </tr>
                             ) : (
-                                contacts.map((contact) => (
+                                contactList.map((contact) => (
                                     <tr key={contact.id} className="hover:bg-gray-50 transition">
                                         <td className="px-2 py-4">
                                             <div className="text-sm font-medium text-gray-900 truncate max-w-[200px]">{contact.name}</div>
@@ -277,8 +290,25 @@ export default function Contacts() {
                                         <td className="px-2 py-4">
                                             <div className="text-sm text-gray-600 truncate max-w-[180px]">{contact.email}</div>
                                         </td>
-                                        <td className="px-2 py-4 whitespace-nowrap">
+                                        <td className="px-2 py-4 whitespace-nowrap hidden md:table-cell">
                                             <div className="text-sm text-gray-600">{contact.phone || '—'}</div>
+                                        </td>
+                                        <td className="px-2 py-4 whitespace-nowrap hidden lg:table-cell">
+                                            <div className="text-sm text-gray-600 font-medium">{contact.subscription_plan || '—'}</div>
+                                        </td>
+                                        <td className="px-2 py-4 whitespace-nowrap hidden xl:table-cell">
+                                            <div className="text-sm text-gray-600">{contact.max_users || '—'}</div>
+                                        </td>
+                                        <td className="px-2 py-4 whitespace-nowrap">
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${contact.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                {contact.active ? 'Active' : 'Inactive'}
+                                            </span>
+                                        </td>
+                                        <td className="px-2 py-4 whitespace-nowrap hidden xl:table-cell">
+                                            <div className="text-sm text-gray-600">{contact.billing_mode == 30 ? 'Mensual' : (contact.billing_mode == 365 ? 'Anual' : (contact.billing_mode || '—'))}</div>
+                                        </td>
+                                        <td className="px-2 py-4 whitespace-nowrap hidden lg:table-cell">
+                                            <div className="text-sm text-gray-600">{contact.distributor_id || '—'}</div>
                                         </td>
                                         <td className="px-2 py-4 whitespace-nowrap hidden lg:table-cell">
                                             <div className="text-sm text-gray-500">{contact.external_id || '—'}</div>
@@ -302,6 +332,78 @@ export default function Contacts() {
                             )}
                         </tbody>
                     </table>
+
+                    {/* Pagination Controls */}
+                    {paginationData && (
+                        <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+                            <div className="flex-1 flex justify-between sm:hidden">
+                                <button
+                                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                                    disabled={page === 1}
+                                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Previous
+                                </button>
+                                <button
+                                    onClick={() => setPage(p => (!paginationData.last_page || p < paginationData.last_page) ? p + 1 : p)}
+                                    disabled={page === paginationData?.last_page}
+                                    className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                                <div className="flex items-center">
+                                    <span className="text-sm text-gray-700 mr-2">Show:</span>
+                                    <select
+                                        value={perPage}
+                                        onChange={(e) => {
+                                            setPerPage(Number(e.target.value));
+                                            setPage(1);
+                                        }}
+                                        className="border border-gray-300 rounded-md text-sm focus:ring-primary-500 py-1 pl-2 pr-6"
+                                    >
+                                        <option value={10}>10</option>
+                                        <option value={25}>25</option>
+                                        <option value={50}>50</option>
+                                        <option value={100}>100</option>
+                                    </select>
+                                    <span className="text-sm text-gray-700 ml-4">
+                                        Showing <span className="font-medium">{paginationData.from || 0}</span> to <span className="font-medium">{paginationData.to || 0}</span> of{' '}
+                                        <span className="font-medium">{paginationData.total || 0}</span> results
+                                    </span>
+                                </div>
+                                <div>
+                                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                                        <button
+                                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                                            disabled={page === 1}
+                                            className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                        >
+                                            <span className="sr-only">Previous</span>
+                                            <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                                <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                                            </svg>
+                                        </button>
+                                        {/* Simple page numbers */}
+                                        <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                                            Page {page} of {paginationData.last_page || 1}
+                                        </span>
+                                        <button
+                                            onClick={() => setPage(p => (!paginationData.last_page || p < paginationData.last_page) ? p + 1 : p)}
+                                            disabled={page === paginationData?.last_page || (paginationData.last_page === 0 && page === 1)}
+                                            className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                                        >
+                                            <span className="sr-only">Next</span>
+                                            <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                                <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                                            </svg>
+                                        </button>
+                                    </nav>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </main>
 

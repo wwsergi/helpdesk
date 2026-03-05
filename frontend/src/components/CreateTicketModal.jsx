@@ -24,8 +24,8 @@ export default function CreateTicketModal({ isOpen, onClose }) {
         queryKey: ['contacts-search', contactSearch],
         queryFn: async () => {
             if (contactSearch.length < 2) return [];
-            const response = await apiClient.get(`/contacts?search=${contactSearch}`);
-            return response.data;
+            const response = await apiClient.get(`/contacts?search=${contactSearch}&per_page=10`);
+            return response.data.data;
         },
         enabled: contactSearch.length >= 2,
     });
