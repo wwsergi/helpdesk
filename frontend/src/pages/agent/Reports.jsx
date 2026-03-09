@@ -55,9 +55,22 @@ export default function Reports() {
         },
     });
 
+    // Fetch distributor stats
+    const { data: distributorData, isLoading: distributorLoading } = useQuery({
+        queryKey: ['reports-distributors', appliedDateRange],
+        queryFn: async () => {
+            const params = new URLSearchParams();
+            if (appliedDateRange.from) params.append('from', appliedDateRange.from);
+            if (appliedDateRange.to) params.append('to', appliedDateRange.to);
+            const response = await apiClient.get(`/reports/distributors?${params}`);
+            return response.data;
+        },
+    });
+
     const overview = statsData?.overview || {};
     const agentStats = agentData?.by_agent || [];
     const customerStats = customerData?.by_customer || [];
+    const distributorStats = distributorData?.by_distributor || [];
 
     const handleApplyFilter = () => {
         setAppliedDateRange(dateRange);
@@ -219,6 +232,15 @@ export default function Reports() {
                             >
                                 By Customer
                             </button>
+                            <button
+                                onClick={() => setActiveTab('distributors')}
+                                className={`px-6 py-4 font-semibold transition ${activeTab === 'distributors'
+                                    ? 'text-primary-600 border-b-2 border-primary-600 bg-primary-50'
+                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                    }`}
+                            >
+                                By Distributor
+                            </button>
                         </div>
                     </div>
 
@@ -315,59 +337,71 @@ export default function Reports() {
                                     <table className="min-w-full divide-y divide-gray-200">
                                         <thead>
                                             <tr className="bg-gray-50">
-                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Customer
-                                                </th>
-                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Total
-                                                </th>
-                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    New
-                                                </th>
-                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Open
-                                                </th>
-                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    In Progress
-                                                </th>
-                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Pending
-                                                </th>
-                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Resolved
-                                                </th>
-                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                    Closed
-                                                </th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">New</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Open</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">In Progress</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Pending</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Resolved</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Closed</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {customerStats.map((customer, index) => (
                                                 <tr key={customer.customer_id || index} className="hover:bg-gray-50">
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                                        {customer.customer_name}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold text-gray-900">
-                                                        {customer.total}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-blue-600">
-                                                        {customer.new}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600">
-                                                        {customer.open}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-yellow-600">
-                                                        {customer.in_progress}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-purple-600">
-                                                        {customer.pending_customer}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600">
-                                                        {customer.resolved}
-                                                    </td>
-                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">
-                                                        {customer.closed}
-                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{customer.customer_name}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold text-gray-900">{customer.total}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-blue-600">{customer.new}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600">{customer.open}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-yellow-600">{customer.in_progress}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-purple-600">{customer.pending_customer}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600">{customer.resolved}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">{customer.closed}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'distributors' && (
+                            <div className="overflow-x-auto">
+                                {distributorLoading ? (
+                                    <div className="text-center py-12">
+                                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+                                        <p className="text-gray-500">Loading distributor statistics...</p>
+                                    </div>
+                                ) : distributorStats.length === 0 ? (
+                                    <div className="text-center py-12 text-gray-500">
+                                        <p>No distributor data available for the selected date range</p>
+                                    </div>
+                                ) : (
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead>
+                                            <tr className="bg-gray-50">
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Distributor</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">New</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Open</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">In Progress</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Pending</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Resolved</th>
+                                                <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Closed</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {distributorStats.map((distributor, index) => (
+                                                <tr key={`dist-${index}`} className="hover:bg-gray-50">
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{distributor.distributor_name}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center font-bold text-gray-900">{distributor.total}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-blue-600">{distributor.new}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600">{distributor.open}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-yellow-600">{distributor.in_progress}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-purple-600">{distributor.pending_customer}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600">{distributor.resolved}</td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-500">{distributor.closed}</td>
                                                 </tr>
                                             ))}
                                         </tbody>

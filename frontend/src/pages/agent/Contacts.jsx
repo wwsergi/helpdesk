@@ -6,10 +6,13 @@ import apiClient from '../../lib/api';
 import AgentLayout from '../../components/agent/AgentLayout';
 
 export default function Contacts() {
-    const { logout } = useAuthStore();
+    const { user, logout } = useAuthStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [page, setPage] = useState(1);
     const [perPage, setPerPage] = useState(50);
+    const [filterPlan, setFilterPlan] = useState('');
+    const [filterStatus, setFilterStatus] = useState('');
+    const [filterDistributor, setFilterDistributor] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingContact, setEditingContact] = useState(null);
     const [formData, setFormData] = useState({
@@ -36,9 +39,13 @@ export default function Contacts() {
     const queryClient = useQueryClient();
 
     const { data: contacts, isLoading } = useQuery({
-        queryKey: ['contacts', searchQuery, page, perPage],
+        queryKey: ['contacts', searchQuery, page, perPage, filterPlan, filterStatus, filterDistributor],
         queryFn: async () => {
-            const response = await apiClient.get(`/contacts?search=${searchQuery}&page=${page}&per_page=${perPage}`);
+            let url = `/contacts?search=${searchQuery}&page=${page}&per_page=${perPage}`;
+            if (filterPlan) url += `&plan=${filterPlan}`;
+            if (filterStatus) url += `&active=${filterStatus}`;
+            if (filterDistributor) url += `&distributor=${filterDistributor}`;
+            const response = await apiClient.get(url);
             return response.data;
         },
     });
@@ -209,30 +216,65 @@ export default function Contacts() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
                     </div>
+
+                    <div className="flex space-x-2 ml-4 flex-1">
+                        <select
+                            value={filterPlan}
+                            onChange={(e) => { setFilterPlan(e.target.value); setPage(1); }}
+                            className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5 shadow-sm transition"
+                        >
+                            <option value="">All Plans</option>
+                            <option value="Basic">Basic</option>
+                            <option value="Pro">Pro</option>
+                        </select>
+                        <select
+                            value={filterStatus}
+                            onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }}
+                            className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5 shadow-sm transition"
+                        >
+                            <option value="">All Statuses</option>
+                            <option value="1">Active</option>
+                            <option value="0">Inactive</option>
+                        </select>
+                        <select
+                            value={filterDistributor}
+                            onChange={(e) => { setFilterDistributor(e.target.value); setPage(1); }}
+                            className="bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-primary-500 focus:border-primary-500 block w-full p-2.5 shadow-sm transition"
+                        >
+                            <option value="">All Distributors</option>
+                            <option value="1">Conversia</option>
+                            <option value="2">Winworld</option>
+                        </select>
+                    </div>
+
                     <div className="flex space-x-3 ml-4">
-                        <button
-                            onClick={() => {
-                                setIsImportModalOpen(true);
-                                setImportFile(null);
-                                setImportResult(null);
-                            }}
-                            className="px-4 py-2 text-primary-600 bg-white border border-primary-200 font-semibold rounded-lg hover:bg-primary-50 hover:border-primary-300 transition flex items-center"
-                        >
-                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
-                            Import
-                        </button>
-                        <button
-                            onClick={handleSync}
-                            disabled={isSyncing}
-                            className="px-4 py-2 text-primary-600 bg-white border border-primary-200 font-semibold rounded-lg hover:bg-primary-50 hover:border-primary-300 transition flex items-center disabled:opacity-50"
-                        >
-                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            {isSyncing ? 'Syncing...' : 'Sync from Intratime'}
-                        </button>
+                        {user?.role === 'admin' && (
+                            <button
+                                onClick={() => {
+                                    setIsImportModalOpen(true);
+                                    setImportFile(null);
+                                    setImportResult(null);
+                                }}
+                                className="px-4 py-2 text-primary-600 bg-white border border-primary-200 font-semibold rounded-lg hover:bg-primary-50 hover:border-primary-300 transition flex items-center"
+                            >
+                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                </svg>
+                                Import
+                            </button>
+                        )}
+                        {user?.role === 'admin' && (
+                            <button
+                                onClick={handleSync}
+                                disabled={isSyncing}
+                                className="px-4 py-2 text-primary-600 bg-white border border-primary-200 font-semibold rounded-lg hover:bg-primary-50 hover:border-primary-300 transition flex items-center disabled:opacity-50"
+                            >
+                                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                {isSyncing ? 'Syncing...' : 'Sync from Intratime'}
+                            </button>
+                        )}
                         <button
                             onClick={() => {
                                 setEditingContact(null);
@@ -308,7 +350,9 @@ export default function Contacts() {
                                             <div className="text-sm text-gray-600">{contact.billing_mode == 30 ? 'Mensual' : (contact.billing_mode == 365 ? 'Anual' : (contact.billing_mode || '—'))}</div>
                                         </td>
                                         <td className="px-2 py-4 whitespace-nowrap hidden lg:table-cell">
-                                            <div className="text-sm text-gray-600">{contact.distributor_id || '—'}</div>
+                                            <div className="text-sm text-gray-600">
+                                                {contact.distributor_id == 1 ? 'Conversia' : 'Winworld'}
+                                            </div>
                                         </td>
                                         <td className="px-2 py-4 whitespace-nowrap hidden lg:table-cell">
                                             <div className="text-sm text-gray-500">{contact.external_id || '—'}</div>
@@ -320,12 +364,14 @@ export default function Contacts() {
                                             >
                                                 Edit
                                             </button>
-                                            <button
-                                                onClick={() => handleDelete(contact.id)}
-                                                className="text-red-600 hover:text-red-900"
-                                            >
-                                                Delete
-                                            </button>
+                                            {user?.role === 'admin' && (
+                                                <button
+                                                    onClick={() => handleDelete(contact.id)}
+                                                    className="text-red-600 hover:text-red-900"
+                                                >
+                                                    Delete
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))

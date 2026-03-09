@@ -221,6 +221,11 @@ export default function AgentInbox() {
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 mb-2">
                                             <span className="text-sm font-mono text-gray-500">{ticket.uuid}</span>
+                                            {ticket.parent_ticket_id && (
+                                                <span className="px-2 py-1 text-xs font-medium rounded bg-indigo-100 text-indigo-700">
+                                                    Delegated
+                                                </span>
+                                            )}
                                             <span className={`px-2 py-1 text-xs font-medium rounded ${STATUS_COLORS[ticket.status]}`}>
                                                 {ticket.status.replace('_', ' ')}
                                             </span>
@@ -230,6 +235,14 @@ export default function AgentInbox() {
                                             {(ticket.sla_first_response_breached || ticket.sla_resolution_breached) && (
                                                 <span className="px-2 py-1 text-xs font-medium rounded bg-red-100 text-red-800">
                                                     SLA BREACH
+                                                </span>
+                                            )}
+                                            {ticket.children_count > 0 && (
+                                                <span className="px-2 py-1 text-xs font-medium rounded bg-amber-100 text-amber-800 flex items-center gap-1">
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                                    </svg>
+                                                    {ticket.children_count} sub-ticket{ticket.children_count > 1 ? 's' : ''}
                                                 </span>
                                             )}
                                         </div>

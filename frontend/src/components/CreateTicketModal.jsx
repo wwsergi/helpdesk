@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../lib/api';
 import FileUpload from './FileUpload';
+import CategorySelector from './CategorySelector';
 
 export default function CreateTicketModal({ isOpen, onClose }) {
     const [contactSearch, setContactSearch] = useState('');
@@ -38,21 +39,11 @@ export default function CreateTicketModal({ isOpen, onClose }) {
         },
     });
 
-    const { data: flatCategories } = useQuery({
-        queryKey: ['categories-flat'],
+    const { data: categories } = useQuery({
+        queryKey: ['categories'],
         queryFn: async () => {
             const response = await apiClient.get('/categories');
-            const flatten = (items, depth = 0) => {
-                let flat = [];
-                items.forEach(item => {
-                    flat.push({ id: item.id, name: item.name, depth });
-                    if (item.children) {
-                        flat = [...flat, ...flatten(item.children, depth + 1)];
-                    }
-                });
-                return flat;
-            };
-            return flatten(response.data);
+            return response.data;
         },
     });
 
@@ -221,19 +212,12 @@ export default function CreateTicketModal({ isOpen, onClose }) {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Category (3-Level)</label>
-                        <select
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Category (Optional)</label>
+                        <CategorySelector
+                            categories={categories || []}
                             value={newTicket.category_id}
-                            onChange={(e) => setNewTicket({ ...newTicket, category_id: e.target.value })}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
-                        >
-                            <option value="">Select a category...</option>
-                            {flatCategories?.map(cat => (
-                                <option key={cat.id} value={cat.id}>
-                                    {'\u00A0'.repeat(cat.depth * 4)}{cat.name}
-                                </option>
-                            ))}
-                        </select>
+                            onChange={(id) => setNewTicket({ ...newTicket, category_id: id })}
+                        />
                     </div>
 
                     <div>

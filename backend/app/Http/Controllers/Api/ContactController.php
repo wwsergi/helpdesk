@@ -26,6 +26,29 @@ class ContactController extends Controller
             });
         }
 
+        if ($request->filled('plan')) {
+            $query->where('subscription_plan', $request->plan);
+        }
+
+        if ($request->has('active') && $request->active !== '') {
+            $isActive = filter_var($request->active, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($isActive !== null) {
+                $query->where('active', $isActive);
+            }
+        }
+
+        if ($request->filled('distributor')) {
+            if ($request->distributor == 2) {
+                // Winworld filter: catch 2, null, empty, or anything that isn't 1
+                $query->where(function ($q) {
+                    $q->where('distributor_id', '!=', 1)
+                        ->orWhereNull('distributor_id');
+                });
+            } else {
+                $query->where('distributor_id', $request->distributor);
+            }
+        }
+
         $perPage = $request->input('per_page', 50);
         return response()->json($query->orderBy('name')->paginate($perPage));
     }

@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import apiClient from '../../lib/api';
 import FileUpload from '../../components/FileUpload';
+import CategorySelector from '../../components/CategorySelector';
 
 const STATUS_COLORS = {
     NEW: 'bg-blue-100 text-blue-800',
@@ -27,7 +28,6 @@ export default function CustomerTickets() {
     const [formData, setFormData] = useState({
         subject: '',
         description: '',
-        priority: 'P3',
         priority: 'P3',
         category_id: '',
         attachment_ids: []
@@ -53,18 +53,6 @@ export default function CustomerTickets() {
     });
 
     const categories = categoriesData || [];
-
-    const flattenCategories = (cats, parentName = '') => {
-        let flat = [];
-        cats.forEach((cat) => {
-            const fullName = parentName ? `${parentName} > ${cat.name}` : cat.name;
-            flat.push({ ...cat, name: fullName });
-            if (cat.children && cat.children.length > 0) {
-                flat = flat.concat(flattenCategories(cat.children, fullName));
-            }
-        });
-        return flat;
-    };
 
     const createMutation = useMutation({
         mutationFn: async (data) => {
@@ -353,20 +341,13 @@ export default function CustomerTickets() {
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Category
+                                        Category (Optional)
                                     </label>
-                                    <select
+                                    <CategorySelector
+                                        categories={categories}
                                         value={formData.category_id}
-                                        onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    >
-                                        <option value="">Select a category</option>
-                                        {flattenCategories(categories).map((category) => (
-                                            <option key={category.id} value={category.id}>
-                                                {category.name}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        onChange={(id) => setFormData({ ...formData, category_id: id })}
+                                    />
                                 </div>
 
                                 <div>

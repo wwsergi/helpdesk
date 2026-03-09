@@ -12,8 +12,19 @@ class TicketController extends Controller
 {
     public function index(Request $request)
     {
+        $assignedToMe = $request->has('assigned_to_me') && $request->assigned_to_me;
+
         $query = Ticket::with(['contact', 'user', 'queue', 'messages.user', 'messages.contact'])
+            ->withCount('children')
             ->where('tenant_id', $request->user()->tenant_id);
+
+        // "My Tickets" shows all tickets assigned to me, including subtickets delegated to me.
+        // General inbox only shows top-level tickets.
+        if ($assignedToMe) {
+            $query->where('user_id', $request->user()->id);
+        } else {
+            $query->whereNull('parent_ticket_id');
+        }
 
         // Filter by status
         if ($request->has('status')) {
@@ -23,11 +34,6 @@ class TicketController extends Controller
         // Filter by priority
         if ($request->has('priority')) {
             $query->where('priority', $request->priority);
-        }
-
-        // Filter by assigned user (for agents)
-        if ($request->has('assigned_to_me') && $request->assigned_to_me) {
-            $query->where('user_id', $request->user()->id);
         }
 
         // Filter by specific assigned user
@@ -78,8 +84,7 @@ class TicketController extends Controller
                 return response()->json(['data' => [], 'total' => 0]);
             }
 
-            $query->where('contact_id', $contact->id)
-                ->whereNull('parent_ticket_id');
+            $query->where('contact_id', $contact->id);
         }
 
         $tickets = $query->orderBy('created_at', 'desc')->paginate(20);
@@ -91,7 +96,7 @@ class TicketController extends Controller
     {
         $validated = $request->validate([
             'subject' => 'required_without:parent_ticket_id|string|max:255',
-            'description' => 'required|string',
+            'description' => 'nullable|string',
             'priority' => 'required|in:P1,P2,P3,P4',
             'ticket_type_id' => 'nullable|exists:ticket_types,id',
             'contact_id' => 'nullable|exists:contacts,id',
@@ -103,27 +108,28 @@ class TicketController extends Controller
             'attachments.*.mime_type' => 'required|string',
             'attachments.*.size' => 'required|integer',
             'user_id' => 'nullable|exists:users,id',
+            'comment' => 'nullable|string',
         ]);
 
         // Subticket Logic
         $subject = $validated['subject'] ?? null;
         $status = 'NEW';
         $contactId = $validated['contact_id'] ?? null;
+        $parentTicket = null;
 
         if (!empty($validated['parent_ticket_id'])) {
             $parentTicket = Ticket::where('tenant_id', $request->user()->tenant_id)
                 ->findOrFail($validated['parent_ticket_id']);
 
-            // Inherit subject from parent
-            $subject = $parentTicket->subject;
+            // Enforce max 2 levels
+            if ($parentTicket->parent_ticket_id) {
+                return response()->json(['message' => 'Sub-tickets cannot be nested. Only one level of delegation is allowed.'], 422);
+            }
 
-            // Subtickets start as IN_PROGRESS if assigned (which they should be)
-            // But let's trust the default logic or set it here if assigned
-            $status = 'IN_PROGRESS'; // Default for subtickets as they differ from customer tickets
-
-            // Keep contact_id null for internal tickets or maybe link to primary contact? 
-            // Spec says "Subtickets have their own operational data". 
-            // For now, let's leave contact_id as passed or null.
+            // Auto-generate subject from parent — subticket is a delegation record
+            $subject = '[Delegation] ' . $parentTicket->subject;
+            $status = 'IN_PROGRESS';
+            $contactId = $parentTicket->contact_id;
         }
 
         // For customers, create or get their contact record
@@ -150,9 +156,9 @@ class TicketController extends Controller
             'uuid' => 'TKT-' . strtoupper(Str::random(6)),
             'tenant_id' => $request->user()->tenant_id,
             'contact_id' => $contactId,
-            'subject' => $subject, // Use determined subject
-            'description' => $validated['description'],
-            'status' => $status, // Use determined status
+            'subject' => $subject,
+            'description' => $validated['description'] ?? null,
+            'status' => $status,
             'priority' => $validated['priority'],
             'ticket_type_id' => $validated['ticket_type_id'] ?? null,
             'category_id' => $validated['category_id'] ?? null,
@@ -161,28 +167,48 @@ class TicketController extends Controller
             'channel' => 'web',
         ]);
 
-        // Create initial message from description
-        $message = TicketMessage::create([
-            'ticket_id' => $ticket->id,
-            'contact_id' => $request->user()->role === 'customer' ? $contactId : null,
-            'user_id' => $request->user()->role !== 'customer' ? $request->user()->id : null,
-            'is_internal' => false,
-            'body' => $validated['description'],
-            'channel_source' => 'web',
-        ]);
+        if ($parentTicket) {
+            // Subticket: post the comment as an internal note on the PARENT ticket conversation
+            $assignedAgent = $validated['user_id']
+                ? \App\Models\User::find($validated['user_id'])
+                : null;
+            $agentLabel = $assignedAgent
+                ? $assignedAgent->name . ($assignedAgent->level ? ' (L' . $assignedAgent->level . ')' : '')
+                : 'Unassigned';
+            $commentBody = !empty($validated['comment'])
+                ? $validated['comment']
+                : 'Delegation created — assigned to ' . $agentLabel . '.';
 
-        // Create attachments if provided
-        if (!empty($validated['attachments'])) {
-            foreach ($validated['attachments'] as $fileData) {
-                // Security check: ensure path is within attachments folder
-                if (str_starts_with($fileData['path'], 'attachments/')) {
-                    \App\Models\TicketAttachment::create([
-                        'ticket_message_id' => $message->id,
-                        'name' => $fileData['name'],
-                        'path' => $fileData['path'],
-                        'mime_type' => $fileData['mime_type'],
-                        'size' => $fileData['size'],
-                    ]);
+            TicketMessage::create([
+                'ticket_id' => $parentTicket->id,
+                'user_id' => $request->user()->id,
+                'is_internal' => true,
+                'body' => '🔀 **Delegated to ' . $agentLabel . '** [' . $ticket->uuid . '] — ' . $commentBody,
+                'channel_source' => 'web',
+            ]);
+        } else {
+            // Regular ticket: create initial message from description
+            $message = TicketMessage::create([
+                'ticket_id' => $ticket->id,
+                'contact_id' => $request->user()->role === 'customer' ? $contactId : null,
+                'user_id' => $request->user()->role !== 'customer' ? $request->user()->id : null,
+                'is_internal' => false,
+                'body' => $validated['description'],
+                'channel_source' => 'web',
+            ]);
+
+            // Create attachments if provided
+            if (!empty($validated['attachments'])) {
+                foreach ($validated['attachments'] as $fileData) {
+                    if (str_starts_with($fileData['path'], 'attachments/')) {
+                        \App\Models\TicketAttachment::create([
+                            'ticket_message_id' => $message->id,
+                            'name' => $fileData['name'],
+                            'path' => $fileData['path'],
+                            'mime_type' => $fileData['mime_type'],
+                            'size' => $fileData['size'],
+                        ]);
+                    }
                 }
             }
         }
@@ -192,7 +218,12 @@ class TicketController extends Controller
 
     public function show(Request $request, $id)
     {
-        $ticket = Ticket::with(['contact', 'user', 'queue', 'messages.user', 'messages.contact', 'messages.attachments', 'children.user', 'children.queue'])
+        $ticket = Ticket::with([
+            'contact', 'user', 'queue',
+            'messages.user', 'messages.contact', 'messages.attachments',
+            'children.user',
+            'parent.messages.user', 'parent.messages.contact', 'parent.messages.attachments',
+        ])
             ->where('tenant_id', $request->user()->tenant_id)
             ->findOrFail($id);
 
@@ -220,7 +251,7 @@ class TicketController extends Controller
         $ticket = Ticket::where('tenant_id', $request->user()->tenant_id)->findOrFail($id);
 
         $validated = $request->validate([
-            'status' => 'nullable|in:NEW,IN_PROGRESS,PENDING_CUSTOMER,RESOLVED',
+            'status' => 'nullable|in:NEW,OPEN,IN_PROGRESS,PENDING_CUSTOMER,RESOLVED,CLOSED',
             'priority' => 'nullable|in:P1,P2,P3,P4',
             'user_id' => 'nullable|exists:users,id',
             'queue_id' => 'nullable|exists:queues,id',
@@ -270,6 +301,12 @@ class TicketController extends Controller
     {
         $ticket = Ticket::where('tenant_id', $request->user()->tenant_id)->findOrFail($id);
 
+        // All messages always live on the parent ticket — single unified conversation.
+        // If this is a subticket, transparently redirect to the parent.
+        $targetTicket = $ticket->parent_ticket_id
+            ? Ticket::where('tenant_id', $request->user()->tenant_id)->findOrFail($ticket->parent_ticket_id)
+            : $ticket;
+
         $contactId = null;
 
         // For customers, check permission and get contact_id
@@ -278,7 +315,7 @@ class TicketController extends Controller
                 ->where('tenant_id', $request->user()->tenant_id)
                 ->first();
 
-            if (!$contact || $ticket->contact_id !== $contact->id) {
+            if (!$contact || $targetTicket->contact_id !== $contact->id) {
                 abort(403, 'Unauthorized');
             }
             $contactId = $contact->id;
@@ -294,11 +331,18 @@ class TicketController extends Controller
             'attachments.*.size' => 'required|integer',
         ]);
 
-        // Customers cannot create internal messages
-        $isInternal = $request->user()->role === 'customer' ? false : ($validated['is_internal'] ?? false);
+        // L2 agents and subticket conversations are always internal.
+        // Customers always public. L1/admin agents choose.
+        if ($ticket->parent_ticket_id || $request->user()->level == 2) {
+            $isInternal = true;
+        } elseif ($request->user()->role === 'customer') {
+            $isInternal = false;
+        } else {
+            $isInternal = $validated['is_internal'] ?? false;
+        }
 
         $message = TicketMessage::create([
-            'ticket_id' => $ticket->id,
+            'ticket_id' => $targetTicket->id,
             'contact_id' => $request->user()->role === 'customer' ? $contactId : null,
             'user_id' => $request->user()->role !== 'customer' ? $request->user()->id : null,
             'is_internal' => $isInternal,
@@ -322,24 +366,20 @@ class TicketController extends Controller
             }
         }
 
-        // Mark first response time if applicable
-        if (!$ticket->first_response_at && !$isInternal && $request->user()->role !== 'customer') {
-            $ticket->update(['first_response_at' => now()]);
+        // Mark first response time if applicable (on the parent/target ticket)
+        if (!$targetTicket->first_response_at && !$isInternal && $request->user()->role !== 'customer') {
+            $targetTicket->update(['first_response_at' => now()]);
         }
 
-        // Status Automation
+        // Status Automation (on the parent/target ticket)
         if ($request->user()->role === 'customer') {
-            // Customer reply -> In Progress (action needed)
-            if ($ticket->status !== 'IN_PROGRESS' && $ticket->status !== 'NEW') {
-                $ticket->update(['status' => 'IN_PROGRESS']);
+            if ($targetTicket->status !== 'IN_PROGRESS' && $targetTicket->status !== 'NEW') {
+                $targetTicket->update(['status' => 'IN_PROGRESS']);
             }
         } else {
-            // Agent reply
             if (!$isInternal) {
-                // Public reply -> Pending Customer
-                $ticket->update(['status' => 'PENDING_CUSTOMER']);
+                $targetTicket->update(['status' => 'PENDING_CUSTOMER']);
             }
-            // Internal note -> No status change
         }
 
         return response()->json($message->load(['user', 'contact', 'attachments']), 201);

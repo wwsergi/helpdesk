@@ -58,14 +58,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/contacts/{id}', [\App\Http\Controllers\Api\ContactController::class, 'update']);
     Route::delete('/contacts/{id}', [\App\Http\Controllers\Api\ContactController::class, 'destroy']);
 
-    // Agents (Admin only)
+    // Agents list (accessible to all agents for assignment/delegation)
+    Route::get('/agents', [\App\Http\Controllers\Api\AgentController::class, 'index']);
+    Route::get('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'show']);
+
+    // Agents CRUD (Admin only)
     Route::middleware('admin')->group(function () {
-        Route::get('/agents', [\App\Http\Controllers\Api\AgentController::class, 'index']);
         Route::post('/agents', [\App\Http\Controllers\Api\AgentController::class, 'store']);
-        Route::patch('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'update']);
-        Route::delete('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'destroy']);
-        Route::post('/agents', [\App\Http\Controllers\Api\AgentController::class, 'store']);
-        Route::get('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'show']);
         Route::patch('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'update']);
         Route::delete('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'destroy']);
     });
@@ -91,6 +90,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/stats', [\App\Http\Controllers\ReportsController::class, 'overallStats']);
         Route::get('/agents', [\App\Http\Controllers\ReportsController::class, 'agentStats']);
         Route::get('/customers', [\App\Http\Controllers\ReportsController::class, 'customerStats']);
+        Route::get('/distributors', [\App\Http\Controllers\ReportsController::class, 'distributorStats']);
     });
 
     // Dashboard

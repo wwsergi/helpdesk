@@ -7,19 +7,20 @@ import FileUpload from '../../components/FileUpload';
 
 export default function AgentTicketDetail() {
     const { id } = useParams();
-    const logout = useAuthStore((state) => state.logout);
+    const { logout, user: currentUser } = useAuthStore();
     const navigate = useNavigate();
+    const isL2Agent = currentUser?.level == 2;
     const [replyText, setReplyText] = useState('');
-    const [isInternal, setIsInternal] = useState(false);
+    const [isInternal, setIsInternal] = useState(isL2Agent);
     const [files, setFiles] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [selectedStatus, setSelectedStatus] = useState('');
     const [isDelegateModalOpen, setIsDelegateModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('conversation');
     const [delegateForm, setDelegateForm] = useState({
-        description: '',
         user_id: '',
-        priority: 'P2'
+        priority: 'P2',
+        comment: ''
     });
     const queryClient = useQueryClient();
 
@@ -28,14 +29,26 @@ export default function AgentTicketDetail() {
         queryFn: async () => {
             const response = await apiClient.get(`/tickets/${id}`);
             setSelectedStatus(response.data.status);
+            if (response.data.parent_ticket_id) setIsInternal(true);
             return response.data;
         },
+    });
+
+    // When viewing a subticket, fetch the parent ticket directly so its
+    // conversation is always fresh and independent of the nested response.
+    const { data: parentTicket } = useQuery({
+        queryKey: ['ticket', ticket?.parent_ticket_id],
+        queryFn: async () => {
+            const response = await apiClient.get(`/tickets/${ticket.parent_ticket_id}`);
+            return response.data;
+        },
+        enabled: !!ticket?.parent_ticket_id,
     });
 
     const { data: agents } = useQuery({
         queryKey: ['agents'],
         queryFn: async () => {
-            const response = await apiClient.get('/users?role=agent');
+            const response = await apiClient.get('/agents');
             return response.data;
         },
     });
@@ -54,9 +67,12 @@ export default function AgentTicketDetail() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['ticket', id] });
+            if (ticket?.parent_ticket_id) {
+                queryClient.invalidateQueries({ queryKey: ['ticket', ticket.parent_ticket_id] });
+            }
             setReplyText('');
             setFiles([]);
-            setIsInternal(false);
+            if (!ticket?.parent_ticket_id && !isL2Agent) setIsInternal(false);
         },
     });
 
@@ -86,11 +102,7 @@ export default function AgentTicketDetail() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['ticket', id] });
             setIsDelegateModalOpen(false);
-            setDelegateForm({
-                description: '',
-                user_id: '',
-                priority: 'P2'
-            });
+            setDelegateForm({ user_id: '', priority: 'P2', comment: '' });
         },
     });
 
@@ -237,6 +249,7 @@ export default function AgentTicketDetail() {
                 </div>
             </header>
 
+
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Main Content */}
@@ -253,32 +266,40 @@ export default function AgentTicketDetail() {
                                 >
                                     Conversation
                                 </button>
-                                <button
-                                    onClick={() => setActiveTab('subtickets')}
-                                    className={`${activeTab === 'subtickets'
-                                        ? 'border-primary-500 text-primary-600'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                        } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
-                                >
-                                    Subtickets
-                                    {ticket.children?.length > 0 && (
-                                        <span className="ml-2 bg-gray-100 text-gray-900 py-0.5 px-2.5 rounded-full text-xs font-medium">
-                                            {ticket.children.length}
-                                        </span>
-                                    )}
-                                </button>
+                                {!ticket.parent_ticket_id && (
+                                    <button
+                                        onClick={() => setActiveTab('subtickets')}
+                                        className={`${activeTab === 'subtickets'
+                                            ? 'border-primary-500 text-primary-600'
+                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
+                                    >
+                                        Sub-tickets
+                                        {ticket.children?.length > 0 && (
+                                            <span className="ml-2 bg-amber-100 text-amber-800 py-0.5 px-2 rounded-full text-xs font-semibold">
+                                                {ticket.children.length}
+                                            </span>
+                                        )}
+                                    </button>
+                                )}
                             </nav>
                         </div>
 
                         {/* Tab Content */}
                         {activeTab === 'conversation' && (
                             <>
-                                {/* Messages Timeline */}
+                                {/* Messages Timeline — parent + all subticket messages merged */}
                                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                                     <h2 className="text-lg font-semibold text-gray-900 mb-4">Conversation</h2>
                                     <div className="space-y-4">
-                                        {ticket.messages && ticket.messages.length > 0 ? (
-                                            ticket.messages.map((message) => (
+                                        {(() => {
+                                            // Single source of truth: all messages live on the parent ticket.
+                                            // Subticket view uses its own direct query for the parent.
+                                            const messages = ticket.parent_ticket_id
+                                                ? (parentTicket?.messages || [])
+                                                : (ticket.messages || []);
+                                            const sorted = [...messages].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+                                            return sorted.length > 0 ? sorted.map((message) => (
                                                 <div
                                                     key={message.id}
                                                     className={`p-4 rounded-lg ${message.is_internal
@@ -287,12 +308,12 @@ export default function AgentTicketDetail() {
                                                         }`}
                                                 >
                                                     <div className="flex justify-between items-start mb-2">
-                                                        <div>
+                                                        <div className="flex items-center gap-2 flex-wrap">
                                                             <span className="font-semibold text-gray-900">
-                                                                {message.author?.name || 'Unknown'}
+                                                                {message.user?.name || message.contact?.name || 'Unknown'}
                                                             </span>
                                                             {message.is_internal && (
-                                                                <span className="ml-2 px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs font-medium rounded">
+                                                                <span className="px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs font-medium rounded">
                                                                     Internal Note
                                                                 </span>
                                                             )}
@@ -338,10 +359,10 @@ export default function AgentTicketDetail() {
                                                         </div>
                                                     )}
                                                 </div>
-                                            ))
-                                        ) : (
+                                            )) : (
                                             <p className="text-gray-500 text-center py-8">No messages yet</p>
-                                        )}
+                                        );
+                                        })()}
                                     </div>
                                 </div>
 
@@ -365,15 +386,23 @@ export default function AgentTicketDetail() {
                                         </div>
 
                                         <div className="flex items-center justify-between">
-                                            <label className="flex items-center">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isInternal}
-                                                    onChange={(e) => setIsInternal(e.target.checked)}
-                                                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                                                />
-                                                <span className="ml-2 text-sm text-gray-700">Internal note (not visible to customer)</span>
-                                            </label>
+                                            {(ticket.parent_ticket_id || isL2Agent) ? (
+                                                <span className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 px-2 py-1 rounded">
+                                                    {ticket.parent_ticket_id
+                                                        ? 'All replies in sub-tickets are internal notes'
+                                                        : 'L2 agent — all replies are internal notes'}
+                                                </span>
+                                            ) : (
+                                                <label className="flex items-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isInternal}
+                                                        onChange={(e) => setIsInternal(e.target.checked)}
+                                                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                                    />
+                                                    <span className="ml-2 text-sm text-gray-700">Internal note (not visible to customer)</span>
+                                                </label>
+                                            )}
                                             <button
                                                 type="submit"
                                                 disabled={replyMutation.isPending || isUploading}
@@ -390,55 +419,60 @@ export default function AgentTicketDetail() {
                         {activeTab === 'subtickets' && (
                             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                                 <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-lg font-semibold text-gray-900">Sub-Tickets (Delegated)</h2>
+                                    <h2 className="text-lg font-semibold text-gray-900">Sub-Tickets <span className="text-gray-400 font-normal text-base">(Delegated work)</span></h2>
                                     <button
                                         onClick={() => setIsDelegateModalOpen(true)}
-                                        className="text-sm bg-primary-50 text-primary-700 px-3 py-1.5 rounded-lg hover:bg-primary-100 font-medium"
+                                        className="text-sm bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 font-medium transition"
                                     >
-                                        + Create New
+                                        + Create Sub-Ticket
                                     </button>
                                 </div>
 
                                 {ticket.children && ticket.children.length > 0 ? (
                                     <div className="space-y-3">
-                                        {ticket.children.map(child => (
-                                            <div key={child.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
-                                                <div>
-                                                    <div className="font-medium text-gray-900">
-                                                        <Link to={`/agent/tickets/${child.id}`} className="hover:underline text-primary-600">
-                                                            {child.uuid}
-                                                        </Link>
-                                                        <span className="text-gray-500 mx-2">-</span>
-                                                        <span className="text-gray-900">{child.subject}</span>
-                                                    </div>
-                                                    <div className="text-sm text-gray-500 flex items-center mt-1">
-                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${child.status === 'RESOLVED' ? 'bg-green-100 text-green-800' :
-                                                            child.status === 'NEW' ? 'bg-blue-100 text-blue-800' :
-                                                                'bg-yellow-100 text-yellow-800'
-                                                            }`}>
-                                                            {child.status.replace('_', ' ')}
-                                                        </span>
-                                                        <span className="mx-2">•</span>
-                                                        <span>Assigned to: {child.user?.name || 'Unassigned'}</span>
+                                        {ticket.children.map(child => {
+                                            const isResolved = child.status === 'RESOLVED';
+                                            const statusBorderColor = isResolved ? 'border-l-green-400' : 'border-l-yellow-400';
+                                            const statusBadge = isResolved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
+                                            return (
+                                                <div key={child.id} className={`p-4 bg-gray-50 rounded-lg border border-gray-100 border-l-4 ${statusBorderColor}`}>
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            {child.user?.level && (
+                                                                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">
+                                                                    L{child.user.level}
+                                                                </span>
+                                                            )}
+                                                            <span className="font-medium text-gray-900">
+                                                                {child.user?.name || 'Unassigned'}
+                                                            </span>
+                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge}`}>
+                                                                {child.status.replace('_', ' ')}
+                                                            </span>
+                                                            {child.priority && (
+                                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                                                                    {child.priority}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-xs font-mono text-gray-400">{child.uuid}</span>
                                                     </div>
                                                 </div>
-                                                <Link
-                                                    to={`/agent/tickets/${child.id}`}
-                                                    className="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 transition"
-                                                >
-                                                    View
-                                                </Link>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 ) : (
-                                    <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                                        <p className="text-gray-500 mb-2">No sub-tickets created yet.</p>
+                                    <div className="text-center py-10 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                                        <svg className="w-10 h-10 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                        </svg>
+                                        <p className="text-gray-500 mb-2 font-medium">No sub-tickets yet</p>
+                                        <p className="text-sm text-gray-400 mb-4">Delegate part of this ticket to another agent</p>
                                         <button
                                             onClick={() => setIsDelegateModalOpen(true)}
-                                            className="text-primary-600 hover:text-primary-800 text-sm font-medium"
+                                            className="text-primary-600 hover:text-primary-800 text-sm font-medium border border-primary-300 px-4 py-1.5 rounded-lg hover:bg-primary-50 transition"
                                         >
-                                            Delegate this ticket
+                                            + Create Sub-Ticket
                                         </button>
                                     </div>
                                 )}
@@ -448,20 +482,22 @@ export default function AgentTicketDetail() {
 
                     {/* Sidebar */}
                     <div className="space-y-6">
-                        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
-                            <div className="space-y-3">
-                                <button
-                                    onClick={() => setIsDelegateModalOpen(true)}
-                                    className="w-full bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 transition flex items-center justify-center"
-                                >
-                                    <svg className="w-5 h-5 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                    </svg>
-                                    Delegate / Create Sub-Ticket
-                                </button>
+                        {!ticket.parent_ticket_id && (
+                            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                                <h2 className="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={() => setIsDelegateModalOpen(true)}
+                                        className="w-full bg-white border border-gray-300 text-gray-700 font-medium py-2 px-4 rounded-lg hover:bg-gray-50 transition flex items-center justify-center"
+                                    >
+                                        <svg className="w-5 h-5 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                        </svg>
+                                        Delegate / Create Sub-Ticket
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Ticket Info */}
                         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -605,13 +641,14 @@ export default function AgentTicketDetail() {
                         <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
                             <form onSubmit={handleDelegateSubmit}>
                                 <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                                    <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                                        Delegate Ticket (Create Sub-Ticket)
+                                    <h3 className="text-lg leading-6 font-medium text-gray-900 mb-1">
+                                        Assign Secondary Agent
                                     </h3>
+                                    <p className="text-sm text-gray-500 mb-4">Delegate support for this ticket to another agent. A note will be added to the conversation.</p>
 
                                     <div className="space-y-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Assign To (Secondary Agent)</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Assign To <span className="text-red-500">*</span></label>
                                             <select
                                                 required
                                                 value={delegateForm.user_id}
@@ -620,35 +657,36 @@ export default function AgentTicketDetail() {
                                             >
                                                 <option value="">Select Agent...</option>
                                                 {agents?.map(agent => (
-                                                    <option key={agent.id} value={agent.id}>{agent.name}</option>
+                                                    <option key={agent.id} value={agent.id}>
+                                                        {agent.name}{agent.level ? ` (L${agent.level})` : ''}
+                                                    </option>
                                                 ))}
                                             </select>
                                         </div>
 
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Internal Instructions</label>
-                                            <textarea
-                                                required
-                                                rows={4}
-                                                value={delegateForm.description}
-                                                onChange={(e) => setDelegateForm({ ...delegateForm, description: e.target.value })}
-                                                placeholder="Provide detailed instructions for the delegated agent..."
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Priority <span className="text-red-500">*</span></label>
                                             <select
                                                 value={delegateForm.priority}
                                                 onChange={(e) => setDelegateForm({ ...delegateForm, priority: e.target.value })}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                                             >
                                                 <option value="P1">P1 - Critical</option>
                                                 <option value="P2">P2 - High</option>
                                                 <option value="P3">P3 - Normal</option>
                                                 <option value="P4">P4 - Low</option>
                                             </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Comment <span className="text-gray-400 font-normal">(visible in conversation)</span></label>
+                                            <textarea
+                                                rows={3}
+                                                value={delegateForm.comment}
+                                                onChange={(e) => setDelegateForm({ ...delegateForm, comment: e.target.value })}
+                                                placeholder="Optional instructions or context for the assigned agent..."
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                                            />
                                         </div>
                                     </div>
                                 </div>

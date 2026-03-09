@@ -29,6 +29,9 @@ class ReportsController extends Controller
             $query->whereDate('created_at', '<=', $request->to);
         }
 
+        // Get total before adding groupBy
+        $totalTickets = (clone $query)->count();
+
         // Get overview counts by status
         $statusCounts = $query->select('status', DB::raw('count(*) as count'))
             ->groupBy('status')
@@ -37,7 +40,7 @@ class ReportsController extends Controller
             ->toArray();
 
         $overview = [
-            'total_tickets' => $query->count(),
+            'total_tickets' => $totalTickets,
             'new' => $statusCounts['NEW'] ?? 0,
             'open' => $statusCounts['OPEN'] ?? 0,
             'in_progress' => $statusCounts['IN_PROGRESS'] ?? 0,
@@ -183,5 +186,100 @@ class ReportsController extends Controller
         });
 
         return response()->json(['by_customer' => $customerStats]);
+    }
+
+    /**
+     * Get statistics by distributor
+     */
+    public function distributorStats(Request $request)
+    {
+        $query = Ticket::query();
+
+        // Apply tenant filter
+        if ($request->user() && $request->user()->tenant_id) {
+            $query->where('tickets.tenant_id', $request->user()->tenant_id);
+        }
+
+        // Apply date range filter
+        if ($request->has('from')) {
+            $query->whereDate('created_at', '>=', $request->from);
+        }
+        if ($request->has('to')) {
+            $query->whereDate('created_at', '<=', $request->to);
+        }
+
+        // Get tickets joined with contacts to group by distributor_id
+        $ticketsByDistributor = $query->join('contacts', 'tickets.contact_id', '=', 'contacts.id')
+            ->select(
+                'contacts.distributor_id',
+                'tickets.status',
+                DB::raw('count(*) as count')
+            )
+            ->groupBy('contacts.distributor_id', 'tickets.status')
+            ->get();
+
+        // Group by distributor
+        $distributorGroups = $ticketsByDistributor->groupBy('distributor_id');
+
+        $distributorStats = [];
+
+        // Initialize sums for exactly matching the frontend logic: 1 => Conversia, else => Winworld
+        $conversiaStats = [
+            'distributor_name' => 'Conversia',
+            'total' => 0,
+            'new' => 0,
+            'open' => 0,
+            'in_progress' => 0,
+            'pending_customer' => 0,
+            'resolved' => 0,
+            'closed' => 0,
+        ];
+
+        $winworldStats = [
+            'distributor_name' => 'Winworld',
+            'total' => 0,
+            'new' => 0,
+            'open' => 0,
+            'in_progress' => 0,
+            'pending_customer' => 0,
+            'resolved' => 0,
+            'closed' => 0,
+        ];
+
+        foreach ($distributorGroups as $distributorId => $tickets) {
+            $statusCounts = $tickets->pluck('count', 'status')->toArray();
+            $total = array_sum($statusCounts);
+
+            // Distributor ID arrives as a string index, sometimes empty string '' when null in DB
+            if ((string) $distributorId === '1') {
+                $conversiaStats['total'] += $total;
+                $conversiaStats['new'] += $statusCounts['NEW'] ?? 0;
+                $conversiaStats['open'] += $statusCounts['OPEN'] ?? 0;
+                $conversiaStats['in_progress'] += $statusCounts['IN_PROGRESS'] ?? 0;
+                $conversiaStats['pending_customer'] += $statusCounts['PENDING_CUSTOMER'] ?? 0;
+                $conversiaStats['resolved'] += $statusCounts['RESOLVED'] ?? 0;
+                $conversiaStats['closed'] += $statusCounts['CLOSED'] ?? 0;
+            } else {
+                $winworldStats['total'] += $total;
+                $winworldStats['new'] += $statusCounts['NEW'] ?? 0;
+                $winworldStats['open'] += $statusCounts['OPEN'] ?? 0;
+                $winworldStats['in_progress'] += $statusCounts['IN_PROGRESS'] ?? 0;
+                $winworldStats['pending_customer'] += $statusCounts['PENDING_CUSTOMER'] ?? 0;
+                $winworldStats['resolved'] += $statusCounts['RESOLVED'] ?? 0;
+                $winworldStats['closed'] += $statusCounts['CLOSED'] ?? 0;
+            }
+        }
+
+        if ($conversiaStats['total'] > 0)
+            $distributorStats[] = $conversiaStats;
+        if ($winworldStats['total'] > 0)
+            $distributorStats[] = $winworldStats;
+
+        // Sort by total tickets descending
+        usort($distributorStats, function ($a, $b) {
+            return $b['total'] - $a['total'];
+        });
+
+        return response()->json(['by_distributor' => $distributorStats]);
     }
 }

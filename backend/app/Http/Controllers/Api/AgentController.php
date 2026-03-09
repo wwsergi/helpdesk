@@ -33,6 +33,7 @@ class AgentController extends Controller
             'email' => 'required|email|max:255|unique:users,email',
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
             'role' => 'required|in:agent,admin',
+            'level' => 'nullable|integer|in:1,2,3',
         ]);
 
         $agent = User::create([
@@ -41,6 +42,7 @@ class AgentController extends Controller
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'role' => $validated['role'],
+            'level' => $validated['level'] ?? null,
         ]);
 
         return response()->json($agent, 201);
@@ -66,12 +68,14 @@ class AgentController extends Controller
             'email' => 'required|email|max:255|unique:users,email,' . $id,
             'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
             'role' => 'required|in:agent,admin',
+            'level' => 'nullable|integer|in:1,2,3',
         ]);
 
         $updateData = [
             'name' => $validated['name'],
             'email' => $validated['email'],
             'role' => $validated['role'],
+            'level' => $validated['level'] ?? null,
         ];
 
         if (!empty($validated['password'])) {

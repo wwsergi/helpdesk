@@ -16,6 +16,7 @@ export default function Agents() {
         password: '',
         password_confirmation: '',
         role: 'agent',
+        level: '',
     });
     const [error, setError] = useState(null);
 
@@ -76,6 +77,7 @@ export default function Agents() {
             password: '',
             password_confirmation: '',
             role: 'agent',
+            level: '',
         });
         setEditingAgent(null);
         setError(null);
@@ -116,6 +118,7 @@ export default function Agents() {
             password: '',
             password_confirmation: '',
             role: agent.role,
+            level: agent.level ?? '',
         });
         setIsModalOpen(true);
     };
@@ -170,13 +173,14 @@ export default function Agents() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Level</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan="4" className="px-6 py-4 text-center">
+                                    <td colSpan="5" className="px-6 py-4 text-center">
                                         <div className="flex justify-center">
                                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
                                         </div>
@@ -184,7 +188,7 @@ export default function Agents() {
                                 </tr>
                             ) : agents?.length === 0 ? (
                                 <tr>
-                                    <td colSpan="4" className="px-6 py-12 text-center text-gray-500">
+                                    <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
                                         No agents found
                                     </td>
                                 </tr>
@@ -206,6 +210,13 @@ export default function Agents() {
                                             <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${agent.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>
                                                 {agent.role}
                                             </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {agent.level ? (
+                                                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">L{agent.level}</span>
+                                            ) : (
+                                                <span className="text-gray-400 text-xs">—</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <button
@@ -233,8 +244,8 @@ export default function Agents() {
             {/* Modal */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
-                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 flex-shrink-0">
                             <h2 className="text-xl font-bold text-gray-900">
                                 {editingAgent ? 'Edit Agent' : 'Add New Agent'}
                             </h2>
@@ -244,7 +255,7 @@ export default function Agents() {
                                 </svg>
                             </button>
                         </div>
-                        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+                        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
                             {error && (
                                 <div className="bg-red-50 text-red-700 p-3 rounded-lg text-sm border border-red-200">
                                     {error}
@@ -279,6 +290,19 @@ export default function Agents() {
                                 >
                                     <option value="agent">Agent</option>
                                     <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Support Level</label>
+                                <select
+                                    value={formData.level}
+                                    onChange={(e) => setFormData({ ...formData, level: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                >
+                                    <option value="">No level</option>
+                                    <option value="1">L1 — First line</option>
+                                    <option value="2">L2 — Second line</option>
+                                    <option value="3">L3 — Specialist</option>
                                 </select>
                             </div>
 
