@@ -37,6 +37,9 @@ RUN chmod -R 775 storage bootstrap/cache
 # Copy Nginx configuration
 COPY docker/nginx.conf /etc/nginx/sites-available/default
 
+# Copy PHP configuration
+COPY docker/php.ini /usr/local/etc/php/conf.d/custom.ini
+
 # Copy Supervisor configuration
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
