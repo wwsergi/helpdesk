@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/tickets/{id}', [TicketController::class, 'show']);
     Route::patch('/tickets/{id}', [TicketController::class, 'update']);
     Route::post('/tickets/{id}/messages', [TicketController::class, 'addMessage']);
+    Route::patch('/tickets/messages/{messageId}', [\App\Http\Controllers\Api\TicketMessageController::class, 'update']);
     Route::post('/tickets/{id}/assign', [TicketController::class, 'assign']);
     Route::delete('/tickets/{id}', [TicketController::class, 'destroy']);
 

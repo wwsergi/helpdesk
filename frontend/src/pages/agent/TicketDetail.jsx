@@ -22,6 +22,8 @@ export default function AgentTicketDetail() {
         priority: 'P2',
         comment: ''
     });
+    const [editingMessageId, setEditingMessageId] = useState(null);
+    const [editingMessageBody, setEditingMessageBody] = useState('');
     const queryClient = useQueryClient();
 
     const { data: ticket, isLoading } = useQuery({
@@ -113,6 +115,23 @@ export default function AgentTicketDetail() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['tickets'] });
             navigate('/agent/inbox');
+        },
+    });
+
+    const editMessageMutation = useMutation({
+        mutationFn: async ({ messageId, body }) => {
+            return await apiClient.patch(`/tickets/messages/${messageId}`, { body });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['ticket', id] });
+            if (ticket?.parent_ticket_id) {
+                queryClient.invalidateQueries({ queryKey: ['ticket', ticket.parent_ticket_id] });
+            }
+            setEditingMessageId(null);
+            setEditingMessageBody('');
+        },
+        onError: (error) => {
+            alert('Error editing message: ' + (error.response?.data?.message || error.message));
         },
     });
 
@@ -318,11 +337,53 @@ export default function AgentTicketDetail() {
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <span className="text-xs text-gray-500">
-                                                            {new Date(message.created_at).toLocaleString()}
-                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xs text-gray-500">
+                                                                {new Date(message.created_at).toLocaleString()}
+                                                            </span>
+                                                            {message.user_id === currentUser?.id && ticket.status !== 'CLOSED' && editingMessageId !== message.id && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setEditingMessageId(message.id);
+                                                                        setEditingMessageBody(message.body);
+                                                                    }}
+                                                                    className="text-xs text-gray-400 hover:text-primary-600 transition"
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                    <p className="text-gray-700">{message.body}</p>
+                                                    {editingMessageId === message.id ? (
+                                                        <div className="space-y-2">
+                                                            <textarea
+                                                                value={editingMessageBody}
+                                                                onChange={(e) => setEditingMessageBody(e.target.value)}
+                                                                rows={4}
+                                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 text-sm"
+                                                            />
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={editMessageMutation.isPending}
+                                                                    onClick={() => editMessageMutation.mutate({ messageId: message.id, body: editingMessageBody })}
+                                                                    className="px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+                                                                >
+                                                                    {editMessageMutation.isPending ? 'Saving...' : 'Save'}
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => { setEditingMessageId(null); setEditingMessageBody(''); }}
+                                                                    className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-gray-700 whitespace-pre-wrap">{message.body}</p>
+                                                    )}
 
                                                     {/* Attachments */}
                                                     {message.attachments && message.attachments.length > 0 && (
@@ -622,6 +683,19 @@ export default function AgentTicketDetail() {
                                     <div className="text-gray-600">{ticket.contact?.email}</div>
                                     {ticket.contact?.phone && <div className="text-gray-600">{ticket.contact.phone}</div>}
                                 </div>
+                                {(ticket.contact_name || ticket.contact_phone) && (
+                                    <div className="pt-2 border-t border-gray-100">
+                                        <div className="text-xs font-medium text-gray-500 mb-1">Caller Info</div>
+                                        {ticket.contact_name && <div className="font-medium text-gray-800">{ticket.contact_name}</div>}
+                                        {ticket.contact_phone && <div className="text-gray-600">{ticket.contact_phone}</div>}
+                                    </div>
+                                )}
+                                {ticket.creator && (
+                                    <div className="pt-2 border-t border-gray-100">
+                                        <div className="text-xs font-medium text-gray-500 mb-1">Created by</div>
+                                        <div className="font-medium text-gray-800">{ticket.creator.name}</div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

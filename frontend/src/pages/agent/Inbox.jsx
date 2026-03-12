@@ -11,8 +11,9 @@ const STATUS_COLORS = {
     OPEN: 'bg-green-100 text-green-800',
     IN_PROGRESS: 'bg-yellow-100 text-yellow-800',
     PENDING_CUSTOMER: 'bg-purple-100 text-purple-800',
-    RESOLVED: 'bg-gray-100 text-gray-800',
-    CLOSED: 'bg-gray-100 text-gray-600',
+    RESOLVED: 'bg-green-100 text-green-800',
+    CLOSED: 'bg-red-100 text-red-800',
+    DELETED: 'bg-gray-100 text-gray-600',
 };
 
 const PRIORITY_COLORS = {
@@ -22,17 +23,34 @@ const PRIORITY_COLORS = {
     P4: 'bg-blue-100 text-blue-800',
 };
 
+function loadFilter(key, defaultValue) {
+    try {
+        const stored = sessionStorage.getItem('inbox_' + key);
+        return stored !== null ? JSON.parse(stored) : defaultValue;
+    } catch {
+        return defaultValue;
+    }
+}
+
 export default function AgentInbox() {
     const { user, logout } = useAuthStore();
-    const [filter, setFilter] = useState('all');
-    const [searchQuery, setSearchQuery] = useState('');
+    const [filter, setFilter] = useState(() => loadFilter('filter', 'all'));
+    const [searchQuery, setSearchQuery] = useState(() => loadFilter('searchQuery', ''));
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    // New filter states
-    const [statusFilter, setStatusFilter] = useState('all');
-    const [assignedFilter, setAssignedFilter] = useState('all');
-    const [dateFrom, setDateFrom] = useState('');
-    const [dateTo, setDateTo] = useState('');
+    // New filter states with sessionStorage persistence
+    const [statusFilter, setStatusFilter] = useState(() => loadFilter('statusFilter', []));
+    const [assignedFilter, setAssignedFilter] = useState(() => loadFilter('assignedFilter', 'all'));
+    const [dateFrom, setDateFrom] = useState(() => loadFilter('dateFrom', ''));
+    const [dateTo, setDateTo] = useState(() => loadFilter('dateTo', ''));
+
+    // Persist filters to sessionStorage on change
+    useEffect(() => { sessionStorage.setItem('inbox_filter', JSON.stringify(filter)); }, [filter]);
+    useEffect(() => { sessionStorage.setItem('inbox_searchQuery', JSON.stringify(searchQuery)); }, [searchQuery]);
+    useEffect(() => { sessionStorage.setItem('inbox_statusFilter', JSON.stringify(statusFilter)); }, [statusFilter]);
+    useEffect(() => { sessionStorage.setItem('inbox_assignedFilter', JSON.stringify(assignedFilter)); }, [assignedFilter]);
+    useEffect(() => { sessionStorage.setItem('inbox_dateFrom', JSON.stringify(dateFrom)); }, [dateFrom]);
+    useEffect(() => { sessionStorage.setItem('inbox_dateTo', JSON.stringify(dateTo)); }, [dateTo]);
 
     const queryClient = useQueryClient();
     const navigate = useNavigate();
@@ -55,7 +73,7 @@ export default function AgentInbox() {
             if (searchQuery) params.append('search', searchQuery);
 
             // New filters
-            if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
+            if (statusFilter.length > 0) params.append('status', statusFilter.join(','));
             if (assignedFilter && assignedFilter !== 'all') params.append('assigned_to', assignedFilter);
             if (dateFrom) params.append('date_from', dateFrom);
             if (dateTo) params.append('date_to', dateTo);
@@ -132,26 +150,49 @@ export default function AgentInbox() {
                     </div>
                 </div>
 
+                {/* Status Filter Tabs */}
+                <div className="mt-4">
+                    <label className="block text-xs font-medium text-gray-700 mb-2">Status</label>
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { value: 'NEW', label: 'New' },
+                            { value: 'IN_PROGRESS', label: 'In Progress' },
+                            { value: 'PENDING_CUSTOMER', label: 'Pending Customer' },
+                            { value: 'RESOLVED', label: 'Resolved' },
+                            { value: 'DELETED', label: 'Deleted' },
+                        ].map(({ value, label }) => {
+                            const active = statusFilter.includes(value);
+                            return (
+                                <button
+                                    key={value}
+                                    onClick={() =>
+                                        setStatusFilter(prev =>
+                                            active ? prev.filter(s => s !== value) : [...prev, value]
+                                        )
+                                    }
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                                        active
+                                            ? 'bg-primary-600 text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
+                        {statusFilter.length > 0 && (
+                            <button
+                                onClick={() => setStatusFilter([])}
+                                className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition"
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
+                </div>
+
                 {/* Advanced Filters */}
                 <div className="flex flex-col md:flex-row gap-4 mt-4">
-                    {/* Status Filter */}
-                    <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                        >
-                            <option value="all">All Status</option>
-                            <option value="NEW">New</option>
-                            <option value="OPEN">Open</option>
-                            <option value="IN_PROGRESS">In Progress</option>
-                            <option value="PENDING_CUSTOMER">Pending Customer</option>
-                            <option value="RESOLVED">Resolved</option>
-                            <option value="CLOSED">Closed</option>
-                        </select>
-                    </div>
-
                     {/* Assigned Filter */}
                     <div className="flex-1">
                         <label className="block text-xs font-medium text-gray-700 mb-1">Assigned To</label>
@@ -253,6 +294,7 @@ export default function AgentInbox() {
                                         </p>
                                         <p className="text-xs text-gray-500 mt-1">
                                             Created {new Date(ticket.created_at).toLocaleString()}
+                                            {ticket.creator && <span className="ml-2">by <span className="font-medium">{ticket.creator.name}</span></span>}
                                         </p>
                                     </div>
                                     <svg className="w-5 h-5 text-gray-400 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

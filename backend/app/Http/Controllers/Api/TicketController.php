@@ -14,7 +14,7 @@ class TicketController extends Controller
     {
         $assignedToMe = $request->has('assigned_to_me') && $request->assigned_to_me;
 
-        $query = Ticket::with(['contact', 'user', 'queue', 'messages.user', 'messages.contact'])
+        $query = Ticket::with(['contact', 'user', 'creator', 'queue', 'messages.user', 'messages.contact'])
             ->withCount('children')
             ->where('tenant_id', $request->user()->tenant_id);
 
@@ -26,9 +26,21 @@ class TicketController extends Controller
             $query->whereNull('parent_ticket_id');
         }
 
-        // Filter by status
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
+        // Filter by status (comma-separated values; DELETED shows soft-deleted tickets)
+        if ($request->has('status') && $request->status !== '') {
+            $statuses = array_filter(explode(',', $request->status));
+            $hasDeleted = in_array('DELETED', $statuses);
+            $otherStatuses = array_values(array_filter($statuses, fn($s) => $s !== 'DELETED'));
+
+            if ($hasDeleted && empty($otherStatuses)) {
+                $query->withTrashed()->whereNotNull('deleted_at');
+            } elseif ($hasDeleted) {
+                $query->withTrashed()->where(function ($q) use ($otherStatuses) {
+                    $q->whereNotNull('deleted_at')->orWhereIn('status', $otherStatuses);
+                });
+            } else {
+                $query->whereIn('status', $otherStatuses);
+            }
         }
 
         // Filter by priority
@@ -109,6 +121,8 @@ class TicketController extends Controller
             'attachments.*.size' => 'required|integer',
             'user_id' => 'nullable|exists:users,id',
             'comment' => 'nullable|string',
+            'contact_name' => 'nullable|string|max:255',
+            'contact_phone' => 'nullable|string|max:50',
         ]);
 
         // Subticket Logic
@@ -156,6 +170,8 @@ class TicketController extends Controller
             'uuid' => 'TKT-' . strtoupper(Str::random(6)),
             'tenant_id' => $request->user()->tenant_id,
             'contact_id' => $contactId,
+            'contact_name' => $validated['contact_name'] ?? null,
+            'contact_phone' => $validated['contact_phone'] ?? null,
             'subject' => $subject,
             'description' => $validated['description'] ?? null,
             'status' => $status,
@@ -164,6 +180,7 @@ class TicketController extends Controller
             'category_id' => $validated['category_id'] ?? null,
             'parent_ticket_id' => $validated['parent_ticket_id'] ?? null,
             'user_id' => $validated['user_id'] ?? null,
+            'created_by_id' => $request->user()->id,
             'channel' => 'web',
         ]);
 
@@ -213,13 +230,13 @@ class TicketController extends Controller
             }
         }
 
-        return response()->json($ticket->load(['contact', 'user', 'queue', 'messages.user', 'messages.contact', 'messages.attachments']), 201);
+        return response()->json($ticket->load(['contact', 'user', 'creator', 'queue', 'messages.user', 'messages.contact', 'messages.attachments']), 201);
     }
 
     public function show(Request $request, $id)
     {
         $ticket = Ticket::with([
-            'contact', 'user', 'queue',
+            'contact', 'user', 'creator', 'queue',
             'messages.user', 'messages.contact', 'messages.attachments',
             'children.user',
             'parent.messages.user', 'parent.messages.contact', 'parent.messages.attachments',

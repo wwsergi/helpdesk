@@ -59,6 +59,7 @@ class ContactController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:contacts,email,NULL,id,tenant_id,' . $request->user()->tenant_id . '|unique:users,email',
             'phone' => 'nullable|string|max:50',
+            'contact_person' => 'nullable|string|max:255',
             'external_id' => 'nullable|string|max:255',
             'password' => ['nullable', 'confirmed', Password::defaults()],
             'cif' => 'nullable|string|max:255',
@@ -67,11 +68,13 @@ class ContactController extends Controller
             'billing_mode' => 'nullable|string|max:255',
             'rate' => 'nullable|string|max:255',
             'registration_date' => 'nullable|date',
+            'distributor_id' => 'nullable|integer',
         ]);
 
         $contact = Contact::create([
             'tenant_id' => $request->user()->tenant_id,
             'name' => $validated['name'],
+            'contact_person' => $validated['contact_person'] ?? null,
             'email' => $validated['email'],
             'phone' => $validated['phone'] ?? null,
             'external_id' => $validated['external_id'] ?? null,
@@ -81,6 +84,7 @@ class ContactController extends Controller
             'billing_mode' => $validated['billing_mode'] ?? null,
             'rate' => $validated['rate'] ?? null,
             'registration_date' => $validated['registration_date'] ?? null,
+            'distributor_id' => $validated['distributor_id'] ?? null,
         ]);
 
         // Create associated User for login ONLY if password provided
@@ -112,6 +116,7 @@ class ContactController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:contacts,email,' . $id . ',id,tenant_id,' . $request->user()->tenant_id . '|unique:users,email,' . $oldEmail . ',email',
             'phone' => 'nullable|string|max:50',
+            'contact_person' => 'nullable|string|max:255',
             'external_id' => 'nullable|string|max:255',
             'password' => ['nullable', 'confirmed', Password::defaults()],
             'cif' => 'nullable|string|max:255',
@@ -120,10 +125,12 @@ class ContactController extends Controller
             'billing_mode' => 'nullable|string|max:255',
             'rate' => 'nullable|string|max:255',
             'registration_date' => 'nullable|date',
+            'distributor_id' => 'nullable|integer',
         ]);
 
         $contact->update([
             'name' => $validated['name'],
+            'contact_person' => $validated['contact_person'] ?? null,
             'email' => $validated['email'],
             'phone' => $validated['phone'] ?? null,
             'external_id' => $validated['external_id'] ?? null,
@@ -133,6 +140,7 @@ class ContactController extends Controller
             'billing_mode' => $validated['billing_mode'] ?? null,
             'rate' => $validated['rate'] ?? null,
             'registration_date' => $validated['registration_date'] ?? null,
+            'distributor_id' => $validated['distributor_id'] ?? null,
         ]);
 
         // Update associated User logic
