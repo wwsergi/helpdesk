@@ -39,6 +39,8 @@ COPY docker/nginx.conf /etc/nginx/sites-available/default
 
 # Copy PHP configuration
 COPY docker/php.ini /usr/local/etc/php/conf.d/custom.ini
+RUN echo "max_execution_time = 300" >> /usr/local/etc/php/php.ini \
+    && echo "max_input_time = 300" >> /usr/local/etc/php/php.ini
 
 # Copy Supervisor configuration
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
