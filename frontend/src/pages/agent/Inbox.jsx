@@ -43,14 +43,15 @@ export default function AgentInbox() {
     const [assignedFilter, setAssignedFilter] = useState(() => loadFilter('assignedFilter', 'all'));
     const [dateFrom, setDateFrom] = useState(() => loadFilter('dateFrom', ''));
     const [dateTo, setDateTo] = useState(() => loadFilter('dateTo', ''));
+    const [page, setPage] = useState(1);
 
     // Persist filters to sessionStorage on change
-    useEffect(() => { sessionStorage.setItem('inbox_filter', JSON.stringify(filter)); }, [filter]);
-    useEffect(() => { sessionStorage.setItem('inbox_searchQuery', JSON.stringify(searchQuery)); }, [searchQuery]);
-    useEffect(() => { sessionStorage.setItem('inbox_statusFilter', JSON.stringify(statusFilter)); }, [statusFilter]);
-    useEffect(() => { sessionStorage.setItem('inbox_assignedFilter', JSON.stringify(assignedFilter)); }, [assignedFilter]);
-    useEffect(() => { sessionStorage.setItem('inbox_dateFrom', JSON.stringify(dateFrom)); }, [dateFrom]);
-    useEffect(() => { sessionStorage.setItem('inbox_dateTo', JSON.stringify(dateTo)); }, [dateTo]);
+    useEffect(() => { sessionStorage.setItem('inbox_filter', JSON.stringify(filter)); setPage(1); }, [filter]);
+    useEffect(() => { sessionStorage.setItem('inbox_searchQuery', JSON.stringify(searchQuery)); setPage(1); }, [searchQuery]);
+    useEffect(() => { sessionStorage.setItem('inbox_statusFilter', JSON.stringify(statusFilter)); setPage(1); }, [statusFilter]);
+    useEffect(() => { sessionStorage.setItem('inbox_assignedFilter', JSON.stringify(assignedFilter)); setPage(1); }, [assignedFilter]);
+    useEffect(() => { sessionStorage.setItem('inbox_dateFrom', JSON.stringify(dateFrom)); setPage(1); }, [dateFrom]);
+    useEffect(() => { sessionStorage.setItem('inbox_dateTo', JSON.stringify(dateTo)); setPage(1); }, [dateTo]);
 
     const queryClient = useQueryClient();
     const navigate = useNavigate();
@@ -65,18 +66,17 @@ export default function AgentInbox() {
     });
 
     const { data: ticketsData, isLoading } = useQuery({
-        queryKey: ['tickets', filter, searchQuery, statusFilter, assignedFilter, dateFrom, dateTo],
+        queryKey: ['tickets', filter, searchQuery, statusFilter, assignedFilter, dateFrom, dateTo, page],
         queryFn: async () => {
             const params = new URLSearchParams();
             if (filter === 'my-tickets') params.append('assigned_to_me', 'true');
             if (filter === 'unassigned') params.append('unassigned', 'true');
             if (searchQuery) params.append('search', searchQuery);
-
-            // New filters
             if (statusFilter.length > 0) params.append('status', statusFilter.join(','));
             if (assignedFilter && assignedFilter !== 'all') params.append('assigned_to', assignedFilter);
             if (dateFrom) params.append('date_from', dateFrom);
             if (dateTo) params.append('date_to', dateTo);
+            params.append('page', page);
 
             const response = await apiClient.get(`/tickets?${params.toString()}`);
             return response.data;
@@ -85,13 +85,15 @@ export default function AgentInbox() {
 
 
     const tickets = ticketsData?.data || [];
+    const lastPage = ticketsData?.last_page || 1;
+    const total = ticketsData?.total || 0;
 
     return (
         <AgentLayout>
             <div className="mb-6 flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Inbox</h1>
-                    <p className="text-sm text-gray-600">{tickets.length} tickets</p>
+                    <p className="text-sm text-gray-600">{total} tickets</p>
                 </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
@@ -295,6 +297,10 @@ export default function AgentInbox() {
                                         <p className="text-xs text-gray-500 mt-1">
                                             Created {new Date(ticket.created_at).toLocaleString()}
                                             {ticket.creator && <span className="ml-2">by <span className="font-medium">{ticket.creator.name}</span></span>}
+                                            {ticket.user
+                                                ? <span className="ml-2">· Assigned: <span className="font-medium">{ticket.user.name}</span></span>
+                                                : <span className="ml-2">· <span className="text-gray-400">Unassigned</span></span>
+                                            }
                                         </p>
                                     </div>
                                     <svg className="w-5 h-5 text-gray-400 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -306,6 +312,56 @@ export default function AgentInbox() {
                     </div>
                 )}
             </div>
+
+            {/* Pagination */}
+            {lastPage > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                    <p className="text-sm text-gray-600">
+                        Page {page} of {lastPage}
+                    </p>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page === 1}
+                            className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                        >
+                            Previous
+                        </button>
+                        {Array.from({ length: lastPage }, (_, i) => i + 1)
+                            .filter(p => p === 1 || p === lastPage || Math.abs(p - page) <= 2)
+                            .reduce((acc, p, idx, arr) => {
+                                if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                                acc.push(p);
+                                return acc;
+                            }, [])
+                            .map((p, idx) =>
+                                p === '...' ? (
+                                    <span key={`ellipsis-${idx}`} className="px-3 py-2 text-sm text-gray-500">…</span>
+                                ) : (
+                                    <button
+                                        key={p}
+                                        onClick={() => setPage(p)}
+                                        className={`px-3 py-2 text-sm font-medium rounded-lg border transition ${
+                                            p === page
+                                                ? 'bg-primary-600 text-white border-primary-600'
+                                                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        {p}
+                                    </button>
+                                )
+                            )
+                        }
+                        <button
+                            onClick={() => setPage(p => Math.min(lastPage, p + 1))}
+                            disabled={page === lastPage}
+                            className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Create Ticket Modal */}
             <CreateTicketModal

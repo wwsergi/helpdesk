@@ -50,7 +50,7 @@ class ContactController extends Controller
         }
 
         $perPage = $request->input('per_page', 50);
-        return response()->json($query->orderBy('name')->paginate($perPage));
+        return response()->json($query->orderBy('registration_date', 'desc')->orderBy('name')->paginate($perPage));
     }
 
     public function store(Request $request)
