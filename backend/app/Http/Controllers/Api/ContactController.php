@@ -301,11 +301,9 @@ class ContactController extends Controller
             do {
                 $response = Http::withToken($adminToken)
                     ->acceptJson()
-                    ->get("{$adminUrl}/api/companies", [
+                    ->post("{$adminUrl}/api/helpdesk/sync-companies", [
                         'page' => $page,
                         'per_page' => 200,
-                        //'filter[isDemo]' => 'false',
-                        'filter[payment_method]' => '1,2,3,4'
                     ]);
 
                 if (!$response->successful()) {
@@ -322,11 +320,24 @@ class ContactController extends Controller
                     break;
                 }
 
+                $tenantId = $request->user()->tenant_id;
+
+                // Collect all external_ids and emails for this page batch
+                $externalIds = array_filter(array_map(fn($c) => (string)($c['unique_id'] ?? $c['id'] ?? ''), $companies));
+                $emails = array_filter(array_map(fn($c) => $c['email'] ?? null, $companies));
+
+                // Load existing contacts matching this batch in 2 queries
+                $byExternalId = Contact::where('tenant_id', $tenantId)
+                    ->whereIn('external_id', $externalIds)
+                    ->get()->keyBy('external_id');
+
+                $byEmail = Contact::where('tenant_id', $tenantId)
+                    ->whereIn('email', $emails)
+                    ->get()->keyBy('email');
+
                 foreach ($companies as $company) {
-                    $tenantId = $request->user()->tenant_id;
                     $externalId = (string) ($company['unique_id'] ?? $company['id'] ?? '');
 
-                    // Skip companies without IDs
                     if (!$externalId) {
                         $skipped++;
                         continue;
@@ -345,17 +356,28 @@ class ContactController extends Controller
                         'distributor_id' => $company['distributor_id'] ?? null,
                     ];
 
-                    $existing = Contact::where('tenant_id', $tenantId)
-                        ->where('external_id', $externalId)
-                        ->first();
+                    // Match by external_id first, then fall back to email
+                    $existing = $byExternalId[$externalId]
+                        ?? (!empty($contactData['email']) ? ($byEmail[$contactData['email']] ?? null) : null);
 
-                    if ($existing) {
-                        $existing->update($contactData);
-                        $updated++;
-                    } else {
-                        $contactData['external_id'] = $externalId;
-                        Contact::create($contactData);
-                        $imported++;
+                    try {
+                        if ($existing) {
+                            // If email is taken by a different contact, skip updating it
+                            if (!empty($contactData['email'])) {
+                                $emailOwner = $byEmail[$contactData['email']] ?? null;
+                                if ($emailOwner && $emailOwner->id !== $existing->id) {
+                                    unset($contactData['email']);
+                                }
+                            }
+                            $existing->update(array_merge($contactData, ['external_id' => $externalId]));
+                            $updated++;
+                        } else {
+                            Contact::create(array_merge($contactData, ['external_id' => $externalId]));
+                            $imported++;
+                        }
+                    } catch (\Exception $e) {
+                        Log::warning("Sync: skipped external_id={$externalId} — " . $e->getMessage());
+                        $skipped++;
                     }
                 }
 
