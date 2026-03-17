@@ -11,8 +11,9 @@ const STATUS_COLORS = {
     OPEN: 'bg-green-100 text-green-800',
     IN_PROGRESS: 'bg-yellow-100 text-yellow-800',
     PENDING_CUSTOMER: 'bg-purple-100 text-purple-800',
-    RESOLVED: 'bg-gray-100 text-gray-800',
-    CLOSED: 'bg-gray-100 text-gray-600',
+    RESOLVED: 'bg-green-100 text-green-800',
+    CLOSED: 'bg-red-100 text-red-800',
+    DELETED: 'bg-gray-100 text-gray-600',
 };
 
 const PRIORITY_COLORS = {
@@ -22,17 +23,35 @@ const PRIORITY_COLORS = {
     P4: 'bg-blue-100 text-blue-800',
 };
 
+function loadFilter(key, defaultValue) {
+    try {
+        const stored = sessionStorage.getItem('inbox_' + key);
+        return stored !== null ? JSON.parse(stored) : defaultValue;
+    } catch {
+        return defaultValue;
+    }
+}
+
 export default function AgentInbox() {
     const { user, logout } = useAuthStore();
-    const [filter, setFilter] = useState('all');
-    const [searchQuery, setSearchQuery] = useState('');
+    const [filter, setFilter] = useState(() => loadFilter('filter', 'all'));
+    const [searchQuery, setSearchQuery] = useState(() => loadFilter('searchQuery', ''));
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    // New filter states
-    const [statusFilter, setStatusFilter] = useState('all');
-    const [assignedFilter, setAssignedFilter] = useState('all');
-    const [dateFrom, setDateFrom] = useState('');
-    const [dateTo, setDateTo] = useState('');
+    // New filter states with sessionStorage persistence
+    const [statusFilter, setStatusFilter] = useState(() => loadFilter('statusFilter', []));
+    const [assignedFilter, setAssignedFilter] = useState(() => loadFilter('assignedFilter', 'all'));
+    const [dateFrom, setDateFrom] = useState(() => loadFilter('dateFrom', ''));
+    const [dateTo, setDateTo] = useState(() => loadFilter('dateTo', ''));
+    const [page, setPage] = useState(1);
+
+    // Persist filters to sessionStorage on change
+    useEffect(() => { sessionStorage.setItem('inbox_filter', JSON.stringify(filter)); setPage(1); }, [filter]);
+    useEffect(() => { sessionStorage.setItem('inbox_searchQuery', JSON.stringify(searchQuery)); setPage(1); }, [searchQuery]);
+    useEffect(() => { sessionStorage.setItem('inbox_statusFilter', JSON.stringify(statusFilter)); setPage(1); }, [statusFilter]);
+    useEffect(() => { sessionStorage.setItem('inbox_assignedFilter', JSON.stringify(assignedFilter)); setPage(1); }, [assignedFilter]);
+    useEffect(() => { sessionStorage.setItem('inbox_dateFrom', JSON.stringify(dateFrom)); setPage(1); }, [dateFrom]);
+    useEffect(() => { sessionStorage.setItem('inbox_dateTo', JSON.stringify(dateTo)); setPage(1); }, [dateTo]);
 
     const queryClient = useQueryClient();
     const navigate = useNavigate();
@@ -47,18 +66,17 @@ export default function AgentInbox() {
     });
 
     const { data: ticketsData, isLoading } = useQuery({
-        queryKey: ['tickets', filter, searchQuery, statusFilter, assignedFilter, dateFrom, dateTo],
+        queryKey: ['tickets', filter, searchQuery, statusFilter, assignedFilter, dateFrom, dateTo, page],
         queryFn: async () => {
             const params = new URLSearchParams();
             if (filter === 'my-tickets') params.append('assigned_to_me', 'true');
             if (filter === 'unassigned') params.append('unassigned', 'true');
             if (searchQuery) params.append('search', searchQuery);
-
-            // New filters
-            if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
+            if (statusFilter.length > 0) params.append('status', statusFilter.join(','));
             if (assignedFilter && assignedFilter !== 'all') params.append('assigned_to', assignedFilter);
             if (dateFrom) params.append('date_from', dateFrom);
             if (dateTo) params.append('date_to', dateTo);
+            params.append('page', page);
 
             const response = await apiClient.get(`/tickets?${params.toString()}`);
             return response.data;
@@ -67,13 +85,15 @@ export default function AgentInbox() {
 
 
     const tickets = ticketsData?.data || [];
+    const lastPage = ticketsData?.last_page || 1;
+    const total = ticketsData?.total || 0;
 
     return (
         <AgentLayout>
             <div className="mb-6 flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Inbox</h1>
-                    <p className="text-sm text-gray-600">{tickets.length} tickets</p>
+                    <p className="text-sm text-gray-600">{total} tickets</p>
                 </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
@@ -132,26 +152,49 @@ export default function AgentInbox() {
                     </div>
                 </div>
 
+                {/* Status Filter Tabs */}
+                <div className="mt-4">
+                    <label className="block text-xs font-medium text-gray-700 mb-2">Status</label>
+                    <div className="flex flex-wrap gap-2">
+                        {[
+                            { value: 'NEW', label: 'New' },
+                            { value: 'IN_PROGRESS', label: 'In Progress' },
+                            { value: 'PENDING_CUSTOMER', label: 'Pending Customer' },
+                            { value: 'RESOLVED', label: 'Resolved' },
+                            { value: 'DELETED', label: 'Deleted' },
+                        ].map(({ value, label }) => {
+                            const active = statusFilter.includes(value);
+                            return (
+                                <button
+                                    key={value}
+                                    onClick={() =>
+                                        setStatusFilter(prev =>
+                                            active ? prev.filter(s => s !== value) : [...prev, value]
+                                        )
+                                    }
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                                        active
+                                            ? 'bg-primary-600 text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
+                        {statusFilter.length > 0 && (
+                            <button
+                                onClick={() => setStatusFilter([])}
+                                className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition"
+                            >
+                                Clear
+                            </button>
+                        )}
+                    </div>
+                </div>
+
                 {/* Advanced Filters */}
                 <div className="flex flex-col md:flex-row gap-4 mt-4">
-                    {/* Status Filter */}
-                    <div className="flex-1">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                        >
-                            <option value="all">All Status</option>
-                            <option value="NEW">New</option>
-                            <option value="OPEN">Open</option>
-                            <option value="IN_PROGRESS">In Progress</option>
-                            <option value="PENDING_CUSTOMER">Pending Customer</option>
-                            <option value="RESOLVED">Resolved</option>
-                            <option value="CLOSED">Closed</option>
-                        </select>
-                    </div>
-
                     {/* Assigned Filter */}
                     <div className="flex-1">
                         <label className="block text-xs font-medium text-gray-700 mb-1">Assigned To</label>
@@ -253,6 +296,11 @@ export default function AgentInbox() {
                                         </p>
                                         <p className="text-xs text-gray-500 mt-1">
                                             Created {new Date(ticket.created_at).toLocaleString()}
+                                            {ticket.creator && <span className="ml-2">by <span className="font-medium">{ticket.creator.name}</span></span>}
+                                            {ticket.user
+                                                ? <span className="ml-2">· Assigned: <span className="font-medium">{ticket.user.name}</span></span>
+                                                : <span className="ml-2">· <span className="text-gray-400">Unassigned</span></span>
+                                            }
                                         </p>
                                     </div>
                                     <svg className="w-5 h-5 text-gray-400 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -264,6 +312,56 @@ export default function AgentInbox() {
                     </div>
                 )}
             </div>
+
+            {/* Pagination */}
+            {lastPage > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                    <p className="text-sm text-gray-600">
+                        Page {page} of {lastPage}
+                    </p>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setPage(p => Math.max(1, p - 1))}
+                            disabled={page === 1}
+                            className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                        >
+                            Previous
+                        </button>
+                        {Array.from({ length: lastPage }, (_, i) => i + 1)
+                            .filter(p => p === 1 || p === lastPage || Math.abs(p - page) <= 2)
+                            .reduce((acc, p, idx, arr) => {
+                                if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                                acc.push(p);
+                                return acc;
+                            }, [])
+                            .map((p, idx) =>
+                                p === '...' ? (
+                                    <span key={`ellipsis-${idx}`} className="px-3 py-2 text-sm text-gray-500">…</span>
+                                ) : (
+                                    <button
+                                        key={p}
+                                        onClick={() => setPage(p)}
+                                        className={`px-3 py-2 text-sm font-medium rounded-lg border transition ${
+                                            p === page
+                                                ? 'bg-primary-600 text-white border-primary-600'
+                                                : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        {p}
+                                    </button>
+                                )
+                            )
+                        }
+                        <button
+                            onClick={() => setPage(p => Math.min(lastPage, p + 1))}
+                            disabled={page === lastPage}
+                            className="px-3 py-2 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Create Ticket Modal */}
             <CreateTicketModal

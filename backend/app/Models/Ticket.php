@@ -14,7 +14,10 @@ class Ticket extends Model
         'uuid',
         'tenant_id',
         'contact_id',
+        'contact_name',
+        'contact_phone',
         'user_id',
+        'created_by_id',
         'queue_id',
         'category_id',
         'subject',
@@ -88,5 +91,10 @@ class Ticket extends Model
     public function ticketType()
     {
         return $this->belongsTo(TicketType::class);
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by_id');
     }
 }

@@ -10,16 +10,36 @@ export default function CreateTicketModal({ isOpen, onClose }) {
     const [selectedContact, setSelectedContact] = useState(null);
     const [files, setFiles] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
+    const [showNewContactForm, setShowNewContactForm] = useState(false);
+    const [newContactForm, setNewContactForm] = useState({ name: '', email: '', phone: '' });
     const [newTicket, setNewTicket] = useState({
         subject: '',
         description: '',
         priority: 'P3',
         ticket_type_id: '',
         category_id: '',
+        contact_name: '',
+        contact_phone: '',
+        user_id: '',
     });
 
     const queryClient = useQueryClient();
     const navigate = useNavigate();
+
+    const createContactMutation = useMutation({
+        mutationFn: async (data) => {
+            return await apiClient.post('/contacts', data);
+        },
+        onSuccess: (response) => {
+            setSelectedContact(response.data);
+            setShowNewContactForm(false);
+            setNewContactForm({ name: '', email: '', phone: '' });
+            queryClient.invalidateQueries({ queryKey: ['contacts'] });
+        },
+        onError: (error) => {
+            alert('Error creating contact: ' + (error.response?.data?.message || error.message));
+        },
+    });
 
     const { data: contacts, isLoading: isLoadingContacts } = useQuery({
         queryKey: ['contacts-search', contactSearch],
@@ -47,16 +67,24 @@ export default function CreateTicketModal({ isOpen, onClose }) {
         },
     });
 
+    const { data: agents } = useQuery({
+        queryKey: ['agents'],
+        queryFn: async () => {
+            const response = await apiClient.get('/agents');
+            return response.data;
+        },
+    });
+
     const createTicketMutation = useMutation({
         mutationFn: async (data) => {
             return await apiClient.post('/tickets', data);
         },
-        onSuccess: (response) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['tickets'] });
             queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
             onClose();
             resetForm();
-            navigate(`/agent/tickets/${response.data.id}`);
+            navigate('/agent/inbox');
         },
     });
 
@@ -67,10 +95,15 @@ export default function CreateTicketModal({ isOpen, onClose }) {
             priority: 'P3',
             ticket_type_id: '',
             category_id: '',
+            contact_name: '',
+            contact_phone: '',
+            user_id: '',
         });
         setSelectedContact(null);
         setContactSearch('');
         setFiles([]);
+        setShowNewContactForm(false);
+        setNewContactForm({ name: '', email: '', phone: '' });
     };
 
     const handleCreateTicket = async (e) => {
@@ -144,42 +177,130 @@ export default function CreateTicketModal({ isOpen, onClose }) {
                                 </button>
                             </div>
                         ) : (
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    placeholder="Search contact by name or email..."
-                                    value={contactSearch}
-                                    onChange={(e) => setContactSearch(e.target.value)}
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                />
-                                {isLoadingContacts && (
-                                    <div className="absolute right-3 top-2.5">
-                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600"></div>
+                            <>
+                                <div className="flex gap-2 mb-2">
+                                    <div className="relative flex-1">
+                                        <input
+                                            type="text"
+                                            placeholder="Search contact by name or email..."
+                                            value={contactSearch}
+                                            onChange={(e) => { setContactSearch(e.target.value); setShowNewContactForm(false); }}
+                                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        />
+                                        {isLoadingContacts && (
+                                            <div className="absolute right-3 top-2.5">
+                                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary-600"></div>
+                                            </div>
+                                        )}
+                                        {contacts && contacts.length > 0 && (
+                                            <div className="absolute mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
+                                                {contacts.map((contact) => (
+                                                    <button
+                                                        key={contact.id}
+                                                        type="button"
+                                                        onClick={() => setSelectedContact(contact)}
+                                                        className="w-full text-left p-3 hover:bg-gray-50 transition border-b border-gray-50 last:border-0"
+                                                    >
+                                                        <div className="font-medium text-gray-900">{contact.name}</div>
+                                                        <div className="text-xs text-gray-500">{contact.email}</div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
-                                )}
-                                {contacts && contacts.length > 0 && (
-                                    <div className="absolute mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-10 max-h-48 overflow-y-auto">
-                                        {contacts.map((contact) => (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowNewContactForm(!showNewContactForm); setContactSearch(''); }}
+                                        className="px-3 py-2 text-sm font-medium text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50 transition whitespace-nowrap"
+                                    >
+                                        + New Customer
+                                    </button>
+                                </div>
+                                {showNewContactForm && (
+                                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
+                                        <p className="text-sm font-medium text-gray-700">Create New Customer</p>
+                                        <input
+                                            type="text"
+                                            placeholder="Company name *"
+                                            value={newContactForm.name}
+                                            onChange={(e) => setNewContactForm({ ...newContactForm, name: e.target.value })}
+                                            onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                                        />
+                                        <input
+                                            type="email"
+                                            placeholder="Email address *"
+                                            value={newContactForm.email}
+                                            onChange={(e) => setNewContactForm({ ...newContactForm, email: e.target.value })}
+                                            onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Phone (optional)"
+                                            value={newContactForm.phone}
+                                            onChange={(e) => setNewContactForm({ ...newContactForm, phone: e.target.value })}
+                                            onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500"
+                                        />
+                                        <div className="flex gap-2">
                                             <button
-                                                key={contact.id}
                                                 type="button"
-                                                onClick={() => setSelectedContact(contact)}
-                                                className="w-full text-left p-3 hover:bg-gray-50 transition border-b border-gray-50 last:border-0"
+                                                disabled={createContactMutation.isPending}
+                                                onClick={() => {
+                                                    if (!newContactForm.name || !newContactForm.email) {
+                                                        alert('Name and email are required');
+                                                        return;
+                                                    }
+                                                    createContactMutation.mutate({
+                                                        name: newContactForm.name,
+                                                        email: newContactForm.email,
+                                                        phone: newContactForm.phone || null,
+                                                    });
+                                                }}
+                                                className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
                                             >
-                                                <div className="font-medium text-gray-900">{contact.name}</div>
-                                                <div className="text-xs text-gray-500">{contact.email}</div>
+                                                {createContactMutation.isPending ? 'Creating...' : 'Create & Select'}
                                             </button>
-                                        ))}
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowNewContactForm(false)}
+                                                className="px-4 py-2 text-sm font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
-                                {contactSearch.length >= 2 && contacts?.length === 0 && !isLoadingContacts && (
-                                    <div className="absolute mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg z-10 p-4 text-center text-sm text-gray-500">
-                                        No existing contacts found. Search again or enter full details below.
-                                    </div>
-                                )}
-                            </div>
+                            </>
                         )}
                     </div>
+
+                    {/* Optional: Contact Name and Phone (person calling, differs from account) */}
+                    {selectedContact && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Caller Name <span className="text-gray-400 font-normal">(optional)</span></label>
+                                <input
+                                    type="text"
+                                    value={newTicket.contact_name}
+                                    onChange={(e) => setNewTicket({ ...newTicket, contact_name: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    placeholder="If different from account"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Caller Phone <span className="text-gray-400 font-normal">(optional)</span></label>
+                                <input
+                                    type="text"
+                                    value={newTicket.contact_phone}
+                                    onChange={(e) => setNewTicket({ ...newTicket, contact_phone: e.target.value })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    placeholder="Callback number"
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -209,6 +330,22 @@ export default function CreateTicketModal({ isOpen, onClose }) {
                                 ))}
                             </select>
                         </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Assigned To <span className="text-gray-400 font-normal">(optional)</span></label>
+                        <select
+                            value={newTicket.user_id}
+                            onChange={(e) => setNewTicket({ ...newTicket, user_id: e.target.value })}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                        >
+                            <option value="">Unassigned</option>
+                            {agents?.map(agent => (
+                                <option key={agent.id} value={agent.id}>
+                                    {agent.name}{agent.level ? ` (L${agent.level})` : ''}
+                                </option>
+                            ))}
+                        </select>
                     </div>
 
                     <div>

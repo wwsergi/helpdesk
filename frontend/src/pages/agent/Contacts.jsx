@@ -17,6 +17,7 @@ export default function Contacts() {
     const [editingContact, setEditingContact] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
+        contact_person: '',
         email: '',
         phone: '',
         external_id: '',
@@ -28,6 +29,7 @@ export default function Contacts() {
         billing_mode: '',
         rate: '',
         registration_date: '',
+        distributor_id: '',
     });
     const [showPassword, setShowPassword] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -90,6 +92,7 @@ export default function Contacts() {
     const resetForm = () => {
         setFormData({
             name: '',
+            contact_person: '',
             email: '',
             phone: '',
             external_id: '',
@@ -101,6 +104,7 @@ export default function Contacts() {
             billing_mode: '',
             rate: '',
             registration_date: '',
+            distributor_id: '',
         });
         setShowPassword(false);
         setEditingContact(null);
@@ -119,6 +123,7 @@ export default function Contacts() {
         setEditingContact(contact);
         setFormData({
             name: contact.name,
+            contact_person: contact.contact_person || '',
             email: contact.email,
             phone: contact.phone || '',
             external_id: contact.external_id || '',
@@ -130,6 +135,7 @@ export default function Contacts() {
             billing_mode: contact.billing_mode || '',
             rate: contact.rate || '',
             registration_date: contact.registration_date || '',
+            distributor_id: contact.distributor_id || '',
         });
         setShowPassword(false);
         setIsModalOpen(true);
@@ -297,6 +303,7 @@ export default function Contacts() {
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                                <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Contact Person</th>
                                 <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                                 <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Phone</th>
                                 <th className="px-2 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Plan</th>
@@ -311,7 +318,7 @@ export default function Contacts() {
                         <tbody className="bg-white divide-y divide-gray-200">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan="10" className="px-2 py-4 text-center">
+                                    <td colSpan="11" className="px-2 py-4 text-center">
                                         <div className="flex justify-center">
                                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
                                         </div>
@@ -319,7 +326,7 @@ export default function Contacts() {
                                 </tr>
                             ) : contactList.length === 0 ? (
                                 <tr>
-                                    <td colSpan="10" className="px-2 py-12 text-center text-gray-500">
+                                    <td colSpan="11" className="px-2 py-12 text-center text-gray-500">
                                         No customers found
                                     </td>
                                 </tr>
@@ -328,6 +335,9 @@ export default function Contacts() {
                                     <tr key={contact.id} className="hover:bg-gray-50 transition">
                                         <td className="px-2 py-4">
                                             <div className="text-sm font-medium text-gray-900 truncate max-w-[200px]">{contact.name}</div>
+                                        </td>
+                                        <td className="px-2 py-4 hidden md:table-cell">
+                                            <div className="text-sm text-gray-600 truncate max-w-[150px]">{contact.contact_person || '—'}</div>
                                         </td>
                                         <td className="px-2 py-4">
                                             <div className="text-sm text-gray-600 truncate max-w-[180px]">{contact.email}</div>
@@ -473,7 +483,7 @@ export default function Contacts() {
                             {/* Scrollable Content */}
                             <div className="p-6 space-y-4 overflow-y-auto flex-1">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Company Name</label>
                                     <input
                                         type="text"
                                         required
@@ -482,6 +492,28 @@ export default function Contacts() {
                                         readOnly={!!editingContact}
                                         className={`w-full px-4 py-2 border border-gray-300 rounded-lg ${editingContact ? 'bg-gray-50 cursor-not-allowed' : 'focus:ring-2 focus:ring-primary-500'}`}
                                     />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                                    <input
+                                        type="text"
+                                        value={formData.contact_person}
+                                        onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                        placeholder="Name of the main contact at this company"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Distributor</label>
+                                    <select
+                                        value={formData.distributor_id}
+                                        onChange={(e) => setFormData({ ...formData, distributor_id: e.target.value })}
+                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                    >
+                                        <option value="">Select distributor...</option>
+                                        <option value="1">Conversia</option>
+                                        <option value="2">Winworld</option>
+                                    </select>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
