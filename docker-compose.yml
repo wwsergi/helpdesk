@@ -1,4 +1,13 @@
 services:
+    mongodb:
+        image: mongo:7
+        container_name: helpdesk-mongodb
+        restart: unless-stopped
+        volumes:
+            - mongodb_data:/data/db
+        networks:
+            - helpdesk-network
+
     mysql:
         image: mysql:8.0
         container_name: helpdesk-mysql
@@ -54,10 +63,11 @@ services:
             DB_DATABASE: ${DB_DATABASE:-helpdesk}
             DB_USERNAME: ${DB_USERNAME}
             DB_PASSWORD: ${DB_PASSWORD}
-            MYSQL_ATTR_SSL_CA: /var/www/html/docker/rds-ca.pem
             SESSION_DRIVER: file
             CACHE_DRIVER: file
             QUEUE_CONNECTION: sync
+            CLAUDIA_WEBHOOK_SECRET: ${CLAUDIA_WEBHOOK_SECRET}
+            HELPDESK_DEFAULT_TENANT_ID: ${HELPDESK_DEFAULT_TENANT_ID:-1}
         # ports:
         #     - "8000:80"
         depends_on:
@@ -84,6 +94,29 @@ services:
         networks:
             - helpdesk-network
 
+    claudia:
+        build:
+            context: ./claud-ia
+            dockerfile: Dockerfile
+        container_name: helpdesk-claudia
+        restart: unless-stopped
+        ports:
+            - "3001:3000"
+        environment:
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            AUTH_SECRET: ${AUTH_SECRET}
+            SETTINGS_USERNAME: ${SETTINGS_USERNAME}
+            SETTINGS_PASSWORD: ${SETTINGS_PASSWORD}
+            MONGODB_URI: mongodb://helpdesk-mongodb:27017/claudia
+            CLAUDIA_WEBHOOK_SECRET: ${CLAUDIA_WEBHOOK_SECRET}
+            HELPDESK_API_URL: http://backend/api
+        volumes:
+            - ./claud-ia/data:/app/data
+        depends_on:
+            - mongodb
+        networks:
+            - helpdesk-network
+
     proxy:
         image: nginx:alpine
         container_name: helpdesk-proxy
@@ -97,11 +130,14 @@ services:
         depends_on:
             - frontend
             - backend
+            - claudia
         networks:
             - helpdesk-network
 
 volumes:
     mysql_data:
+        driver: local
+    mongodb_data:
         driver: local
 
 networks:

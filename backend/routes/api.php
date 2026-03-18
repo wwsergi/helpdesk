@@ -6,6 +6,9 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\TicketController;
 use App\Http\Controllers\Api\AttachmentController;
 
+// External integrations (Claud-IA) — protected by X-Claudia-Key header
+Route::post('/external/tickets', [\App\Http\Controllers\Api\ExternalTicketController::class, 'store']);
+
 // Public routes
 Route::get('/health', function () {
     return response()->json([
