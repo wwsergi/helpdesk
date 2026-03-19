@@ -273,7 +273,9 @@ class TicketController extends Controller
             'user_id' => 'nullable|exists:users,id',
             'queue_id' => 'nullable|exists:queues,id',
             'category_id' => 'nullable|exists:categories,id',
+            'ticket_type_id' => 'nullable|exists:ticket_types,id',
             'jira_issue_link' => 'nullable|url',
+            'subject' => 'nullable|string|max:255',
         ]);
 
         // Only agents can update tickets, UNLESS customer is marking as RESOLVED
