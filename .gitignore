@@ -29,6 +29,7 @@ backend/bootstrap/cache/*
 
 # Secrets & keys
 *.pem
+*.pem.php
 *.key
 .env
 
