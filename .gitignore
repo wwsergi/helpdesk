@@ -37,3 +37,7 @@ backend/bootstrap/cache/*
 *.xlsx
 *.csv
 deploy.sh
+
+# Let's Encrypt / certbot
+proxy/certbot/
+proxy/certs/
