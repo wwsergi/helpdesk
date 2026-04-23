@@ -51,7 +51,7 @@ export default function AgentLayout({ children }) {
                             <nav className="hidden md:flex items-center space-x-6">
                                 <Link to="/agent" className={linkClass('/agent')}>Dashboard</Link>
                                 <Link to="/agent/inbox" className={linkClass('/agent/inbox')}>Inbox</Link>
-                                <Link to="/agent/kb" className={linkClass('/agent/kb')}>Troubleshooting</Link>
+                                <Link to="/agent/kb" className={linkClass('/agent/kb')}>Knowledge Base</Link>
                                 {user?.role === 'admin' && (
                                     <Link to="/agent/reports" className={linkClass('/agent/reports')}>Reports</Link>
                                 )}
@@ -73,6 +73,7 @@ export default function AgentLayout({ children }) {
                                             <Link onClick={() => setIsSettingsOpen(false)} to="/agent/contacts" className={`block px-4 py-2 text-sm ${isActive('/agent/contacts') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Customers</Link>
                                             <Link onClick={() => setIsSettingsOpen(false)} to="/agent/categories" className={`block px-4 py-2 text-sm ${isActive('/agent/categories') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Categories</Link>
                                             <Link onClick={() => setIsSettingsOpen(false)} to="/agent/ticket-types" className={`block px-4 py-2 text-sm ${isActive('/agent/ticket-types') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Type Ticket</Link>
+                                            <Link onClick={() => setIsSettingsOpen(false)} to="/agent/priorities" className={`block px-4 py-2 text-sm ${isActive('/agent/priorities') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Prioridades</Link>
                                             {user?.role === 'admin' && (
                                                 <Link onClick={() => setIsSettingsOpen(false)} to="/agent/agents" className={`block px-4 py-2 text-sm ${isActive('/agent/agents') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Agents</Link>
                                             )}

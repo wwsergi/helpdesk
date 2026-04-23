@@ -1,10 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AgentLayout from '../../components/agent/AgentLayout';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../lib/api';
 import CreateTicketModal from '../../components/CreateTicketModal';
+import { usePriorities, getPriorityBadgeStyle } from '../../hooks/usePriorities';
+
+function flattenCategories(categories, depth = 0) {
+    const result = [];
+    for (const cat of categories) {
+        result.push({ id: cat.id, name: cat.name, depth });
+        if (cat.children?.length) result.push(...flattenCategories(cat.children, depth + 1));
+    }
+    return result;
+}
 
 const STATUS_COLORS = {
     NEW: 'bg-blue-100 text-blue-800',
@@ -16,12 +26,6 @@ const STATUS_COLORS = {
     DELETED: 'bg-gray-100 text-gray-600',
 };
 
-const PRIORITY_COLORS = {
-    P1: 'bg-red-100 text-red-800',
-    P2: 'bg-orange-100 text-orange-800',
-    P3: 'bg-yellow-100 text-yellow-800',
-    P4: 'bg-blue-100 text-blue-800',
-};
 
 function loadFilter(key, defaultValue) {
     try {
@@ -37,21 +41,37 @@ export default function AgentInbox() {
     const [filter, setFilter] = useState(() => loadFilter('filter', 'all'));
     const [searchQuery, setSearchQuery] = useState(() => loadFilter('searchQuery', ''));
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const { data: priorities = [] } = usePriorities();
 
     // New filter states with sessionStorage persistence
     const [statusFilter, setStatusFilter] = useState(() => loadFilter('statusFilter', []));
+    const [priorityFilter, setPriorityFilter] = useState(() => loadFilter('priorityFilter', []));
     const [assignedFilter, setAssignedFilter] = useState(() => loadFilter('assignedFilter', 'all'));
+    const [categoryFilter, setCategoryFilter] = useState(() => loadFilter('categoryFilter', []));
     const [dateFrom, setDateFrom] = useState(() => loadFilter('dateFrom', ''));
     const [dateTo, setDateTo] = useState(() => loadFilter('dateTo', ''));
     const [page, setPage] = useState(1);
+    const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+    const categoryRef = useRef(null);
 
     // Persist filters to sessionStorage on change
     useEffect(() => { sessionStorage.setItem('inbox_filter', JSON.stringify(filter)); setPage(1); }, [filter]);
     useEffect(() => { sessionStorage.setItem('inbox_searchQuery', JSON.stringify(searchQuery)); setPage(1); }, [searchQuery]);
     useEffect(() => { sessionStorage.setItem('inbox_statusFilter', JSON.stringify(statusFilter)); setPage(1); }, [statusFilter]);
+    useEffect(() => { sessionStorage.setItem('inbox_priorityFilter', JSON.stringify(priorityFilter)); setPage(1); }, [priorityFilter]);
     useEffect(() => { sessionStorage.setItem('inbox_assignedFilter', JSON.stringify(assignedFilter)); setPage(1); }, [assignedFilter]);
+    useEffect(() => { sessionStorage.setItem('inbox_categoryFilter', JSON.stringify(categoryFilter)); setPage(1); }, [categoryFilter]);
     useEffect(() => { sessionStorage.setItem('inbox_dateFrom', JSON.stringify(dateFrom)); setPage(1); }, [dateFrom]);
     useEffect(() => { sessionStorage.setItem('inbox_dateTo', JSON.stringify(dateTo)); setPage(1); }, [dateTo]);
+
+    // Close category dropdown on outside click
+    useEffect(() => {
+        const handler = (e) => {
+            if (categoryRef.current && !categoryRef.current.contains(e.target)) setCategoryDropdownOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
 
     const queryClient = useQueryClient();
     const navigate = useNavigate();
@@ -59,20 +79,26 @@ export default function AgentInbox() {
     // Fetch agents list for assigned filter
     const { data: agents } = useQuery({
         queryKey: ['agents'],
-        queryFn: async () => {
-            const response = await apiClient.get('/agents');
-            return response.data;
-        },
+        queryFn: async () => (await apiClient.get('/agents')).data,
     });
 
+    // Fetch categories for filter
+    const { data: categoriesData } = useQuery({
+        queryKey: ['categories-all'],
+        queryFn: async () => (await apiClient.get('/categories')).data,
+    });
+    const flatCategories = flattenCategories(Array.isArray(categoriesData) ? categoriesData : []);
+
     const { data: ticketsData, isLoading } = useQuery({
-        queryKey: ['tickets', filter, searchQuery, statusFilter, assignedFilter, dateFrom, dateTo, page],
+        queryKey: ['tickets', filter, searchQuery, statusFilter, priorityFilter, categoryFilter, assignedFilter, dateFrom, dateTo, page],
         queryFn: async () => {
             const params = new URLSearchParams();
             if (filter === 'my-tickets') params.append('assigned_to_me', 'true');
             if (filter === 'unassigned') params.append('unassigned', 'true');
             if (searchQuery) params.append('search', searchQuery);
             if (statusFilter.length > 0) params.append('status', statusFilter.join(','));
+            if (priorityFilter.length > 0) params.append('priority', priorityFilter.join(','));
+            if (categoryFilter.length > 0) params.append('category_id', categoryFilter.join(','));
             if (assignedFilter && assignedFilter !== 'all') params.append('assigned_to', assignedFilter);
             if (dateFrom) params.append('date_from', dateFrom);
             if (dateTo) params.append('date_to', dateTo);
@@ -193,6 +219,80 @@ export default function AgentInbox() {
                     </div>
                 </div>
 
+                {/* Priority Filter */}
+                <div className="mt-4">
+                    <label className="block text-xs font-medium text-gray-700 mb-2">Prioridad</label>
+                    <div className="flex flex-wrap gap-2">
+                        {priorities.map((p) => {
+                            const active = priorityFilter.includes(p.name);
+                            return (
+                                <button
+                                    key={p.name}
+                                    onClick={() => setPriorityFilter(prev => active ? prev.filter(v => v !== p.name) : [...prev, p.name])}
+                                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5 ${active ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                                >
+                                    <span
+                                        className="inline-block w-2 h-2 rounded-full"
+                                        style={{ backgroundColor: active ? 'white' : p.color }}
+                                    />
+                                    {p.name} — {p.label}
+                                </button>
+                            );
+                        })}
+                        {priorityFilter.length > 0 && (
+                            <button onClick={() => setPriorityFilter([])} className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition">
+                                Clear
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Category Filter */}
+                <div className="mt-4">
+                    <label className="block text-xs font-medium text-gray-700 mb-2">Categoría</label>
+                    <div className="flex flex-wrap gap-2 items-center">
+                        <div className="relative" ref={categoryRef}>
+                            <button
+                                type="button"
+                                onClick={() => setCategoryDropdownOpen(o => !o)}
+                                className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                            >
+                                {categoryFilter.length === 0 ? 'Todas las categorías' : `${categoryFilter.length} seleccionada${categoryFilter.length > 1 ? 's' : ''}`}
+                                <svg className={`w-4 h-4 text-gray-400 transition-transform ${categoryDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                            {categoryDropdownOpen && (
+                                <ul className="absolute z-50 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                                    {flatCategories.map(cat => (
+                                        <li key={cat.id}
+                                            className="flex items-center gap-2 py-2 text-sm cursor-pointer hover:bg-gray-50"
+                                            style={{ paddingLeft: `${(cat.depth + 1) * 12}px`, paddingRight: '12px' }}
+                                            onMouseDown={e => { e.preventDefault(); setCategoryFilter(prev => prev.includes(cat.id) ? prev.filter(x => x !== cat.id) : [...prev, cat.id]); }}>
+                                            <input type="checkbox" readOnly checked={categoryFilter.includes(cat.id)}
+                                                className="rounded border-gray-300 text-primary-600 pointer-events-none" />
+                                            <span className={categoryFilter.includes(cat.id) ? 'text-primary-700 font-medium' : 'text-gray-800'}>{cat.name}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        {categoryFilter.length > 0 && (
+                            <>
+                                {flatCategories.filter(c => categoryFilter.includes(c.id)).map(cat => (
+                                    <span key={cat.id} className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-100 text-indigo-800 text-xs font-medium rounded-full">
+                                        {cat.name}
+                                        <button onClick={() => setCategoryFilter(prev => prev.filter(x => x !== cat.id))} className="ml-0.5 font-bold hover:text-indigo-900">×</button>
+                                    </span>
+                                ))}
+                                <button onClick={() => setCategoryFilter([])} className="text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 px-2 py-1 rounded transition">
+                                    Clear
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+
                 {/* Advanced Filters */}
                 <div className="flex flex-col md:flex-row gap-4 mt-4">
                     {/* Assigned Filter */}
@@ -272,9 +372,17 @@ export default function AgentInbox() {
                                             <span className={`px-2 py-1 text-xs font-medium rounded ${STATUS_COLORS[ticket.status]}`}>
                                                 {ticket.status.replace('_', ' ')}
                                             </span>
-                                            <span className={`px-2 py-1 text-xs font-medium rounded ${PRIORITY_COLORS[ticket.priority]}`}>
-                                                {ticket.priority}
-                                            </span>
+                                            {ticket.priority && (() => {
+                                                const p = priorities.find(x => x.name === ticket.priority);
+                                                return (
+                                                    <span
+                                                        className="px-2 py-1 text-xs font-medium rounded"
+                                                        style={p ? getPriorityBadgeStyle(p.color) : {}}
+                                                    >
+                                                        {p ? `${p.name} — ${p.label}` : ticket.priority}
+                                                    </span>
+                                                );
+                                            })()}
                                             {(ticket.sla_first_response_breached || ticket.sla_resolution_breached) && (
                                                 <span className="px-2 py-1 text-xs font-medium rounded bg-red-100 text-red-800">
                                                     SLA BREACH

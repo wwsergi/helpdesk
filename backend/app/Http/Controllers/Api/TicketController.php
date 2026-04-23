@@ -43,9 +43,20 @@ class TicketController extends Controller
             }
         }
 
-        // Filter by priority
-        if ($request->has('priority')) {
-            $query->where('priority', $request->priority);
+        // Filter by priority (comma-separated)
+        if ($request->has('priority') && $request->priority !== '') {
+            $priorities = array_filter(explode(',', $request->priority));
+            if (!empty($priorities)) {
+                $query->whereIn('priority', $priorities);
+            }
+        }
+
+        // Filter by category (comma-separated IDs)
+        if ($request->has('category_id') && $request->category_id !== '') {
+            $categoryIds = array_filter(explode(',', $request->category_id));
+            if (!empty($categoryIds)) {
+                $query->whereIn('category_id', $categoryIds);
+            }
         }
 
         // Filter by specific assigned user
@@ -76,6 +87,7 @@ class TicketController extends Controller
             $searchTerm = $request->search;
             $query->where(function ($q) use ($searchTerm) {
                 $q->where('subject', 'like', '%' . $searchTerm . '%')
+                    ->orWhere('jira_issue_link', 'like', '%' . $searchTerm . '%')
                     ->orWhereHas('messages', function ($messageQuery) use ($searchTerm) {
                         $messageQuery->where('body', 'like', '%' . $searchTerm . '%');
                     })
@@ -269,12 +281,12 @@ class TicketController extends Controller
 
         $validated = $request->validate([
             'status' => 'nullable|in:NEW,OPEN,IN_PROGRESS,PENDING_CUSTOMER,RESOLVED,CLOSED',
-            'priority' => 'nullable|in:P1,P2,P3,P4',
+            'priority' => 'nullable|string|max:50',
             'user_id' => 'nullable|exists:users,id',
             'queue_id' => 'nullable|exists:queues,id',
             'category_id' => 'nullable|exists:categories,id',
             'ticket_type_id' => 'nullable|exists:ticket_types,id',
-            'jira_issue_link' => 'nullable|url',
+            'jira_issue_link' => 'nullable|string|max:500',
             'subject' => 'nullable|string|max:255',
         ]);
 
@@ -343,6 +355,7 @@ class TicketController extends Controller
         $validated = $request->validate([
             'body' => 'required|string',
             'is_internal' => 'nullable|boolean',
+            'is_solution' => 'nullable|boolean',
             'attachments' => 'nullable|array',
             'attachments.*.name' => 'required|string',
             'attachments.*.path' => 'required|string',
@@ -360,11 +373,22 @@ class TicketController extends Controller
             $isInternal = $validated['is_internal'] ?? false;
         }
 
+        $isSolution = ($validated['is_solution'] ?? false) && $request->user()->role !== 'customer';
+
+        // Only one solution per ticket — clear any previous
+        if ($isSolution) {
+            TicketMessage::where('ticket_id', $targetTicket->id)->where('is_solution', true)->update(['is_solution' => false]);
+            if (!in_array($targetTicket->status, ['RESOLVED', 'CLOSED'])) {
+                $targetTicket->update(['status' => 'RESOLVED']);
+            }
+        }
+
         $message = TicketMessage::create([
             'ticket_id' => $targetTicket->id,
             'contact_id' => $request->user()->role === 'customer' ? $contactId : null,
             'user_id' => $request->user()->role !== 'customer' ? $request->user()->id : null,
             'is_internal' => $isInternal,
+            'is_solution' => $isSolution,
             'body' => $validated['body'],
             'channel_source' => 'web',
         ]);
@@ -390,14 +414,31 @@ class TicketController extends Controller
             $targetTicket->update(['first_response_at' => now()]);
         }
 
-        // Status Automation (on the parent/target ticket)
+        // Status Automation: only auto-change when the customer replies
         if ($request->user()->role === 'customer') {
             if ($targetTicket->status !== 'IN_PROGRESS' && $targetTicket->status !== 'NEW') {
                 $targetTicket->update(['status' => 'IN_PROGRESS']);
             }
-        } else {
-            if (!$isInternal) {
-                $targetTicket->update(['status' => 'PENDING_CUSTOMER']);
+        }
+
+        // Auto-create Knowledge Base article when solution is marked
+        if ($isSolution) {
+            $alreadyExists = \App\Models\KnowledgeBaseArticle::where('ticket_id', $targetTicket->id)->exists();
+            if (!$alreadyExists) {
+                \App\Models\KnowledgeBaseArticle::create([
+                    'tenant_id'    => $targetTicket->tenant_id,
+                    'ticket_id'    => $targetTicket->id,
+                    'category_id'  => $targetTicket->category_id,
+                    'title'        => $targetTicket->subject,
+                    'slug'         => \Illuminate\Support\Str::slug($targetTicket->subject . '-' . $targetTicket->id),
+                    'content'      => $targetTicket->description ?? '',
+                    'solution'     => $validated['body'],
+                    'is_published' => true,
+                ]);
+            } else {
+                // Update existing article's solution
+                \App\Models\KnowledgeBaseArticle::where('ticket_id', $targetTicket->id)
+                    ->update(['solution' => $validated['body']]);
             }
         }
 

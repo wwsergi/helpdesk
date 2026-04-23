@@ -43,6 +43,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/attachments/{id}', [AttachmentController::class, 'download']);
     Route::delete('/attachments/{id}', [AttachmentController::class, 'destroy']);
 
+    // Inline image upload (for rich text editor)
+    Route::post('/upload/image', [\App\Http\Controllers\Api\UploadController::class, 'image']);
+
     // Tickets
     Route::get('/tickets', [TicketController::class, 'index']);
     Route::post('/tickets', [TicketController::class, 'store']);
@@ -52,6 +55,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/tickets/messages/{messageId}', [\App\Http\Controllers\Api\TicketMessageController::class, 'update']);
     Route::post('/tickets/{id}/assign', [TicketController::class, 'assign']);
     Route::delete('/tickets/{id}', [TicketController::class, 'destroy']);
+
+    // Assistance sheet
+    Route::get('/tickets/{id}/assistance-sheet', [\App\Http\Controllers\Api\AssistanceSheetController::class, 'show']);
+
+    // Ticket time entries
+    Route::get('/tickets/{ticketId}/time-entries', [\App\Http\Controllers\Api\TicketTimeEntryController::class, 'index']);
+    Route::post('/tickets/{ticketId}/time-entries', [\App\Http\Controllers\Api\TicketTimeEntryController::class, 'store']);
+    Route::patch('/tickets/{ticketId}/time-entries/{entryId}', [\App\Http\Controllers\Api\TicketTimeEntryController::class, 'update']);
+    Route::delete('/tickets/{ticketId}/time-entries/{entryId}', [\App\Http\Controllers\Api\TicketTimeEntryController::class, 'destroy']);
 
     // Contacts
     Route::get('/contacts', [\App\Http\Controllers\Api\ContactController::class, 'index']);
@@ -89,12 +101,18 @@ Route::middleware('auth:sanctum')->group(function () {
     // Ticket Types
     Route::apiResource('/ticket-types', \App\Http\Controllers\Api\TicketTypeController::class);
 
+    // Priorities
+    Route::get('/priorities', [\App\Http\Controllers\Api\PriorityController::class, 'index']);
+    Route::post('/priorities', [\App\Http\Controllers\Api\PriorityController::class, 'store']);
+    Route::patch('/priorities/{id}', [\App\Http\Controllers\Api\PriorityController::class, 'update']);
+    Route::delete('/priorities/{id}', [\App\Http\Controllers\Api\PriorityController::class, 'destroy']);
+
     // Reports (Admin only)
     Route::middleware('admin')->prefix('reports')->group(function () {
         Route::get('/stats', [\App\Http\Controllers\ReportsController::class, 'overallStats']);
         Route::get('/agents', [\App\Http\Controllers\ReportsController::class, 'agentStats']);
         Route::get('/customers', [\App\Http\Controllers\ReportsController::class, 'customerStats']);
-        Route::get('/distributors', [\App\Http\Controllers\ReportsController::class, 'distributorStats']);
+Route::get('/distributors', [\App\Http\Controllers\ReportsController::class, 'distributorStats']);
     });
 
     // Dashboard

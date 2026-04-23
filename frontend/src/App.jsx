@@ -18,6 +18,8 @@ import Agents from './pages/agent/Agents';
 import Categories from './pages/agent/Categories';
 import KnowledgeBase from './pages/agent/KnowledgeBase';
 import TicketTypes from './pages/agent/TicketTypes';
+import Priorities from './pages/agent/Priorities';
+import AssistanceSheet from './pages/agent/AssistanceSheet';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -117,6 +119,11 @@ function App() {
               <TicketTypes />
             </ProtectedRoute>
           } />
+          <Route path="/agent/priorities" element={
+            <ProtectedRoute allowedRoles={['agent', 'admin']}>
+              <Priorities />
+            </ProtectedRoute>
+          } />
           <Route path="/agent/kb" element={
             <ProtectedRoute allowedRoles={['agent', 'admin']}>
               <KnowledgeBase />
@@ -125,6 +132,11 @@ function App() {
           <Route path="/agent/reports" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <Reports />
+            </ProtectedRoute>
+          } />
+          <Route path="/agent/tickets/:id/assistance-sheet" element={
+            <ProtectedRoute allowedRoles={['agent', 'admin']}>
+              <AssistanceSheet />
             </ProtectedRoute>
           } />
 

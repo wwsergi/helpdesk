@@ -30,6 +30,12 @@ export default function Contacts() {
         rate: '',
         registration_date: '',
         distributor_id: '',
+        has_contract: false,
+        contract_type: 'none',
+        contract_hours_month: '',
+        contract_start_date: '',
+        contract_end_date: '',
+        contract_notes: '',
     });
     const [showPassword, setShowPassword] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -105,6 +111,12 @@ export default function Contacts() {
             rate: '',
             registration_date: '',
             distributor_id: '',
+            has_contract: false,
+            contract_type: 'none',
+            contract_hours_month: '',
+            contract_start_date: '',
+            contract_end_date: '',
+            contract_notes: '',
         });
         setShowPassword(false);
         setEditingContact(null);
@@ -136,6 +148,12 @@ export default function Contacts() {
             rate: contact.rate || '',
             registration_date: contact.registration_date || '',
             distributor_id: contact.distributor_id || '',
+            has_contract: contact.has_contract || false,
+            contract_type: contact.contract_type || 'none',
+            contract_hours_month: contact.contract_hours_month || '',
+            contract_start_date: contact.contract_start_date || '',
+            contract_end_date: contact.contract_end_date || '',
+            contract_notes: contact.contract_notes || '',
         });
         setShowPassword(false);
         setIsModalOpen(true);
@@ -352,9 +370,16 @@ export default function Contacts() {
                                             <div className="text-sm text-gray-600">{contact.max_users || '—'}</div>
                                         </td>
                                         <td className="px-2 py-4 whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${contact.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                                {contact.active ? 'Active' : 'Inactive'}
-                                            </span>
+                                            <div className="flex flex-col gap-1">
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${contact.active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                    {contact.active ? 'Active' : 'Inactive'}
+                                                </span>
+                                                {contact.has_contract && (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                                        Contrato
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-2 py-4 whitespace-nowrap hidden xl:table-cell">
                                             <div className="text-sm text-gray-600">{contact.billing_mode == 30 ? 'Mensual' : (contact.billing_mode == 365 ? 'Anual' : (contact.billing_mode || '—'))}</div>
@@ -657,6 +682,85 @@ export default function Contacts() {
                                                 value={formData.password_confirmation}
                                                 onChange={(e) => setFormData({ ...formData, password_confirmation: e.target.value })}
                                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* Maintenance Contract */}
+                                <div className="border-t border-gray-200 pt-4 mt-4">
+                                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Contrato de Mantenimiento</h3>
+                                </div>
+
+                                <div>
+                                    <label className="flex items-center space-x-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.has_contract}
+                                            onChange={(e) => setFormData({ ...formData, has_contract: e.target.checked, contract_type: e.target.checked ? (formData.contract_type === 'none' ? 'hours' : formData.contract_type) : 'none' })}
+                                            className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500 border-gray-300"
+                                        />
+                                        <span className="text-sm font-medium text-gray-700">Tiene contrato de mantenimiento</span>
+                                    </label>
+                                </div>
+
+                                {formData.has_contract && (
+                                    <>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de contrato</label>
+                                            <select
+                                                value={formData.contract_type}
+                                                onChange={(e) => setFormData({ ...formData, contract_type: e.target.value })}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                            >
+                                                <option value="hours">Bolsa de horas</option>
+                                                <option value="unlimited">Ilimitado</option>
+                                            </select>
+                                        </div>
+
+                                        {formData.contract_type === 'hours' && (
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Horas contratadas / mes</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={formData.contract_hours_month}
+                                                    onChange={(e) => setFormData({ ...formData, contract_hours_month: e.target.value })}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                                    placeholder="ej. 10"
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha inicio</label>
+                                                <input
+                                                    type="date"
+                                                    value={formData.contract_start_date}
+                                                    onChange={(e) => setFormData({ ...formData, contract_start_date: e.target.value })}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha fin</label>
+                                                <input
+                                                    type="date"
+                                                    value={formData.contract_end_date}
+                                                    onChange={(e) => setFormData({ ...formData, contract_end_date: e.target.value })}
+                                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Notas del contrato</label>
+                                            <textarea
+                                                rows={2}
+                                                value={formData.contract_notes}
+                                                onChange={(e) => setFormData({ ...formData, contract_notes: e.target.value })}
+                                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                                placeholder="Condiciones especiales, SLA, etc."
                                             />
                                         </div>
                                     </>

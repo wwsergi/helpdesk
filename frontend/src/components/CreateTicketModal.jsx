@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import apiClient from '../lib/api';
 import FileUpload from './FileUpload';
 import CategorySelector from './CategorySelector';
+import { usePriorities } from '../hooks/usePriorities';
 
 export default function CreateTicketModal({ isOpen, onClose }) {
+    const { data: priorities = [] } = usePriorities();
     const [contactSearch, setContactSearch] = useState('');
     const [selectedContact, setSelectedContact] = useState(null);
     const [files, setFiles] = useState([]);
@@ -310,10 +312,9 @@ export default function CreateTicketModal({ isOpen, onClose }) {
                                 onChange={(e) => setNewTicket({ ...newTicket, priority: e.target.value })}
                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
                             >
-                                <option value="P1">P1 - Critical</option>
-                                <option value="P2">P2 - High</option>
-                                <option value="P3">P3 - Medium</option>
-                                <option value="P4">P4 - Low</option>
+                                {priorities.map(p => (
+                                    <option key={p.name} value={p.name}>{p.name} — {p.label}</option>
+                                ))}
                             </select>
                         </div>
                         <div>

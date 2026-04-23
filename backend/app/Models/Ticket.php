@@ -97,4 +97,9 @@ class Ticket extends Model
     {
         return $this->belongsTo(User::class, 'created_by_id');
     }
+
+    public function timeEntries()
+    {
+        return $this->hasMany(TicketTimeEntry::class);
+    }
 }

@@ -1,9 +1,21 @@
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../lib/api';
 import FileUpload from '../../components/FileUpload';
+import { usePriorities, getPriorityBadgeStyle } from '../../hooks/usePriorities';
+
+function ImageThumb({ att, onClick }) {
+    return (
+        <img
+            src={att.preview_url}
+            alt={att.name}
+            onClick={() => onClick(att.preview_url, att.name)}
+            className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80 transition border border-gray-200"
+        />
+    );
+}
 
 export default function AgentTicketDetail() {
     const { id } = useParams();
@@ -12,11 +24,25 @@ export default function AgentTicketDetail() {
     const isL2Agent = currentUser?.level == 2;
     const [replyText, setReplyText] = useState('');
     const [isInternal, setIsInternal] = useState(isL2Agent);
+    const [isSolution, setIsSolution] = useState(false);
     const [files, setFiles] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
     const [selectedStatus, setSelectedStatus] = useState('');
+    const { data: priorities = [] } = usePriorities();
+    const [jiraValue, setJiraValue] = useState('');
     const [isDelegateModalOpen, setIsDelegateModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState('conversation');
+    const [lightboxImage, setLightboxImage] = useState(null);
+    const [isTimeEntryModalOpen, setIsTimeEntryModalOpen] = useState(false);
+    const [editingTimeEntry, setEditingTimeEntry] = useState(null);
+    const [timeEntryForm, setTimeEntryForm] = useState({
+        description: '',
+        assistance_type: 'remote',
+        date: new Date().toLocaleDateString('en-CA'),
+        hours: '0',
+        minutes: '0',
+    });
+    const [timeEntryError, setTimeEntryError] = useState('');
     const [delegateForm, setDelegateForm] = useState({
         user_id: '',
         priority: 'P2',
@@ -37,6 +63,10 @@ export default function AgentTicketDetail() {
             return response.data;
         },
     });
+
+    useEffect(() => {
+        if (ticket) setJiraValue(ticket.jira_issue_link || '');
+    }, [ticket?.jira_issue_link]);
 
     // When viewing a subticket, fetch the parent ticket directly so its
     // conversation is always fresh and independent of the nested response.
@@ -76,6 +106,7 @@ export default function AgentTicketDetail() {
             }
             setReplyText('');
             setFiles([]);
+            setIsSolution(false);
             if (!ticket?.parent_ticket_id && !isL2Agent) setIsInternal(false);
         },
     });
@@ -86,12 +117,17 @@ export default function AgentTicketDetail() {
         },
         onSuccess: (response) => {
             const updatedTicket = response.data;
-            queryClient.setQueryData(['ticket', id], updatedTicket);
-            // If the status changed in the backend, update local state
+            queryClient.setQueryData(['ticket', id], (old) => ({
+                ...old,
+                ...updatedTicket,
+                messages: old?.messages ?? updatedTicket.messages,
+                children: old?.children ?? updatedTicket.children,
+            }));
             if (updatedTicket.status) {
                 setSelectedStatus(updatedTicket.status);
             }
         },
+        onError: (err) => alert('Error al guardar: ' + (err.response?.data?.message || err.message)),
     });
 
     const createChildTicketMutation = useMutation({
@@ -162,6 +198,7 @@ export default function AgentTicketDetail() {
             replyMutation.mutate({
                 body: replyText,
                 is_internal: isInternal,
+                is_solution: isSolution,
                 attachments: uploadedAttachments
             });
         } catch (error) {
@@ -173,6 +210,95 @@ export default function AgentTicketDetail() {
     const handleDelegateSubmit = (e) => {
         e.preventDefault();
         createChildTicketMutation.mutate(delegateForm);
+    };
+
+    const { data: timeEntriesData, refetch: refetchTimeEntries } = useQuery({
+        queryKey: ['ticket-time-entries', id],
+        queryFn: async () => {
+            const response = await apiClient.get(`/tickets/${id}/time-entries`);
+            return response.data;
+        },
+        enabled: activeTab === 'tiempos',
+    });
+
+    const createTimeEntryMutation = useMutation({
+        mutationFn: async (data) => apiClient.post(`/tickets/${id}/time-entries`, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['ticket-time-entries', id] });
+            setIsTimeEntryModalOpen(false);
+            setTimeEntryError('');
+            resetTimeEntryForm();
+        },
+        onError: (error) => {
+            const msg = error.response?.data?.message || Object.values(error.response?.data?.errors || {})[0]?.[0] || 'Error al guardar';
+            setTimeEntryError(msg);
+        },
+    });
+
+    const updateTimeEntryMutation = useMutation({
+        mutationFn: async ({ entryId, data }) => apiClient.patch(`/tickets/${id}/time-entries/${entryId}`, data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['ticket-time-entries', id] });
+            setIsTimeEntryModalOpen(false);
+            setTimeEntryError('');
+            resetTimeEntryForm();
+        },
+        onError: (error) => {
+            const msg = error.response?.data?.message || Object.values(error.response?.data?.errors || {})[0]?.[0] || 'Error al guardar';
+            setTimeEntryError(msg);
+        },
+    });
+
+    const deleteTimeEntryMutation = useMutation({
+        mutationFn: async (entryId) => apiClient.delete(`/tickets/${id}/time-entries/${entryId}`),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['ticket-time-entries', id] });
+        },
+    });
+
+    const resetTimeEntryForm = () => {
+        setTimeEntryForm({ description: '', assistance_type: 'remote', date: new Date().toLocaleDateString('en-CA'), hours: '0', minutes: '0' });
+        setTimeEntryError('');
+        setEditingTimeEntry(null);
+    };
+
+    const handleTimeEntrySubmit = (e) => {
+        e.preventDefault();
+        const totalMinutes = (parseInt(timeEntryForm.hours, 10) * 60) + parseInt(timeEntryForm.minutes, 10);
+        if (totalMinutes < 1) {
+            setTimeEntryError('La duración debe ser al menos 1 minuto.');
+            return;
+        }
+        const data = {
+            description: timeEntryForm.description,
+            assistance_type: timeEntryForm.assistance_type,
+            date: timeEntryForm.date,
+            duration_minutes: totalMinutes,
+        };
+        if (editingTimeEntry) {
+            updateTimeEntryMutation.mutate({ entryId: editingTimeEntry.id, data });
+        } else {
+            createTimeEntryMutation.mutate(data);
+        }
+    };
+
+    const handleEditTimeEntry = (entry) => {
+        setEditingTimeEntry(entry);
+        setTimeEntryForm({
+            description: entry.description,
+            assistance_type: entry.assistance_type,
+            date: entry.date ? entry.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+            hours: String(Math.floor((entry.duration_minutes || 0) / 60)),
+            minutes: String((entry.duration_minutes || 0) % 60),
+        });
+        setIsTimeEntryModalOpen(true);
+    };
+
+    const formatDuration = (minutes) => {
+        if (!minutes) return '—';
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        return h > 0 ? `${h}h ${m}m` : `${m}m`;
     };
 
     const { data: flatCategories } = useQuery({
@@ -346,6 +472,15 @@ export default function AgentTicketDetail() {
                                         )}
                                     </button>
                                 )}
+                                <button
+                                    onClick={() => setActiveTab('tiempos')}
+                                    className={`${activeTab === 'tiempos'
+                                        ? 'border-primary-500 text-primary-600'
+                                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                        } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                                >
+                                    Tiempos
+                                </button>
                             </nav>
                         </div>
 
@@ -366,9 +501,11 @@ export default function AgentTicketDetail() {
                                             return sorted.length > 0 ? sorted.map((message) => (
                                                 <div
                                                     key={message.id}
-                                                    className={`p-4 rounded-lg ${message.is_internal
-                                                        ? 'bg-yellow-50 border border-yellow-200'
-                                                        : 'bg-gray-50 border border-gray-200'
+                                                    className={`p-4 rounded-lg ${message.is_solution
+                                                        ? 'bg-green-50 border border-green-300'
+                                                        : message.is_internal
+                                                            ? 'bg-yellow-50 border border-yellow-200'
+                                                            : 'bg-gray-50 border border-gray-200'
                                                         }`}
                                                 >
                                                     <div className="flex justify-between items-start mb-2">
@@ -376,6 +513,11 @@ export default function AgentTicketDetail() {
                                                             <span className="font-semibold text-gray-900">
                                                                 {message.user?.name || message.contact?.name || 'Unknown'}
                                                             </span>
+                                                            {message.is_solution && (
+                                                                <span className="px-2 py-0.5 bg-green-200 text-green-800 text-xs font-semibold rounded flex items-center gap-1">
+                                                                    ✓ Solución
+                                                                </span>
+                                                            )}
                                                             {message.is_internal && (
                                                                 <span className="px-2 py-0.5 bg-yellow-200 text-yellow-800 text-xs font-medium rounded">
                                                                     Internal Note
@@ -432,36 +574,34 @@ export default function AgentTicketDetail() {
 
                                                     {/* Attachments */}
                                                     {message.attachments && message.attachments.length > 0 && (
-                                                        <div className="mt-3 pt-3 border-t border-gray-200/50">
-                                                            <p className="text-xs font-medium text-gray-500 mb-2">Attachments:</p>
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {message.attachments.map(att => (
-                                                                    <a
-                                                                        key={att.id}
-                                                                        href={att.url}
-                                                                        onClick={(e) => {
-                                                                            e.preventDefault();
-                                                                            apiClient.get(att.url, { responseType: 'blob' })
-                                                                                .then(response => {
-                                                                                    const url = window.URL.createObjectURL(new Blob([response.data]));
-                                                                                    const link = document.createElement('a');
-                                                                                    link.href = url;
-                                                                                    link.setAttribute('download', att.name);
-                                                                                    document.body.appendChild(link);
-                                                                                    link.click();
-                                                                                    link.remove();
-                                                                                })
-                                                                                .catch(err => console.error('Download failed', err));
-                                                                        }}
-                                                                        className="flex items-center px-3 py-1.5 bg-white border border-gray-200 rounded text-sm text-primary-600 hover:text-primary-700 hover:border-primary-300 transition"
-                                                                    >
-                                                                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                                                                        </svg>
-                                                                        {att.name} <span className="text-gray-400 ml-1">({(att.size / 1024).toFixed(0)}KB)</span>
-                                                                    </a>
-                                                                ))}
-                                                            </div>
+                                                        <div className="mt-3 pt-3 border-t border-gray-200/50 space-y-2">
+                                                            {/* Image thumbnails */}
+                                                            {message.attachments.filter(a => a.mime_type?.startsWith('image/')).length > 0 && (
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {message.attachments.filter(a => a.mime_type?.startsWith('image/')).map(att => (
+                                                                        <ImageThumb key={att.id} att={att} onClick={(url, name) => setLightboxImage({ url, name })} />
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                            {/* Other files */}
+                                                            {message.attachments.filter(a => !a.mime_type?.startsWith('image/')).length > 0 && (
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {message.attachments.filter(a => !a.mime_type?.startsWith('image/')).map(att => (
+                                                                        <a
+                                                                            key={att.id}
+                                                                            href={att.preview_url}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="flex items-center px-3 py-1.5 bg-white border border-gray-200 rounded text-sm text-primary-600 hover:text-primary-700 hover:border-primary-300 transition"
+                                                                        >
+                                                                            <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                                                            </svg>
+                                                                            {att.name} <span className="text-gray-400 ml-1">({(att.size / 1024).toFixed(0)}KB)</span>
+                                                                        </a>
+                                                                    ))}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     )}
                                                 </div>
@@ -482,7 +622,7 @@ export default function AgentTicketDetail() {
                                                 onChange={(e) => setReplyText(e.target.value)}
                                                 rows={6}
                                                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                                placeholder="Type your reply..."
+                                                placeholder="Escribe un mensaje..."
                                                 required
                                             />
                                         </div>
@@ -491,24 +631,35 @@ export default function AgentTicketDetail() {
                                             <FileUpload files={files} onFilesChange={setFiles} maxSizeBytes={10 * 1024 * 1024} />
                                         </div>
 
-                                        <div className="flex items-center justify-between">
-                                            {(ticket.parent_ticket_id || isL2Agent) ? (
-                                                <span className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 px-2 py-1 rounded">
-                                                    {ticket.parent_ticket_id
-                                                        ? 'All replies in sub-tickets are internal notes'
-                                                        : 'L2 agent — all replies are internal notes'}
-                                                </span>
-                                            ) : (
-                                                <label className="flex items-center">
+                                        <div className="flex items-center justify-between gap-4 flex-wrap">
+                                            <div className="flex items-center gap-4 flex-wrap">
+                                                {(ticket.parent_ticket_id || isL2Agent) ? (
+                                                    <span className="text-xs text-yellow-700 bg-yellow-50 border border-yellow-200 px-2 py-1 rounded">
+                                                        {ticket.parent_ticket_id
+                                                            ? 'All replies in sub-tickets are internal notes'
+                                                            : 'L2 agent — all replies are internal notes'}
+                                                    </span>
+                                                ) : (
+                                                    <label className="flex items-center cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isInternal}
+                                                            onChange={(e) => setIsInternal(e.target.checked)}
+                                                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                                        />
+                                                        <span className="ml-2 text-sm text-gray-700">Nota interna</span>
+                                                    </label>
+                                                )}
+                                                <label className="flex items-center cursor-pointer">
                                                     <input
                                                         type="checkbox"
-                                                        checked={isInternal}
-                                                        onChange={(e) => setIsInternal(e.target.checked)}
-                                                        className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                                        checked={isSolution}
+                                                        onChange={(e) => setIsSolution(e.target.checked)}
+                                                        className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                                                     />
-                                                    <span className="ml-2 text-sm text-gray-700">Internal note (not visible to customer)</span>
+                                                    <span className="ml-2 text-sm text-green-700 font-medium">Marcar como Solución</span>
                                                 </label>
-                                            )}
+                                            </div>
                                             <button
                                                 type="submit"
                                                 disabled={replyMutation.isPending || isUploading}
@@ -520,6 +671,85 @@ export default function AgentTicketDetail() {
                                     </form>
                                 </div>
                             </>
+                        )}
+
+                        {activeTab === 'tiempos' && (
+                            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-lg font-semibold text-gray-900">Registro de Tiempo</h2>
+                                    <button
+                                        onClick={() => { resetTimeEntryForm(); setIsTimeEntryModalOpen(true); }}
+                                        className="text-sm bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 font-medium transition"
+                                    >
+                                        + Nueva acción
+                                    </button>
+                                </div>
+
+                                {/* Summary */}
+                                {timeEntriesData?.summary && timeEntriesData.summary.total_minutes > 0 && (
+                                    <div className="grid grid-cols-3 gap-3 mb-5">
+                                        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-center">
+                                            <div className="text-xs text-blue-600 font-medium mb-1">Total</div>
+                                            <div className="text-lg font-bold text-blue-800">{formatDuration(timeEntriesData.summary.total_minutes)}</div>
+                                        </div>
+                                        <div className="bg-purple-50 border border-purple-100 rounded-lg p-3 text-center">
+                                            <div className="text-xs text-purple-600 font-medium mb-1">Remoto</div>
+                                            <div className="text-lg font-bold text-purple-800">{formatDuration(timeEntriesData.summary.remote_minutes)}</div>
+                                        </div>
+                                        <div className="bg-orange-50 border border-orange-100 rounded-lg p-3 text-center">
+                                            <div className="text-xs text-orange-600 font-medium mb-1">Presencial</div>
+                                            <div className="text-lg font-bold text-orange-800">{formatDuration(timeEntriesData.summary.onsite_minutes)}</div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Entries list */}
+                                {!timeEntriesData || timeEntriesData.entries?.length === 0 ? (
+                                    <div className="text-center py-10 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                                        <svg className="w-10 h-10 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                        <p className="text-gray-500 mb-2 font-medium">Sin registros de tiempo</p>
+                                        <button
+                                            onClick={() => { resetTimeEntryForm(); setIsTimeEntryModalOpen(true); }}
+                                            className="text-primary-600 hover:text-primary-800 text-sm font-medium border border-primary-300 px-4 py-1.5 rounded-lg hover:bg-primary-50 transition"
+                                        >
+                                            + Registrar primera acción
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {timeEntriesData.entries.map((entry) => (
+                                            <div key={entry.id} className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex items-start justify-between gap-4">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${entry.assistance_type === 'remote' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                            {entry.assistance_type === 'remote' ? 'Remoto' : 'Presencial'}
+                                                        </span>
+                                                        <span className="text-xs text-gray-500">{entry.agent?.name}</span>
+                                                        <span className="text-xs text-gray-400">{entry.date ? new Date(entry.date + 'T00:00:00').toLocaleDateString('es-ES') : ''}</span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-700">{entry.description}</p>
+                                                </div>
+                                                <div className="flex items-center gap-3 flex-shrink-0">
+                                                    <span className="text-sm font-semibold text-gray-800 whitespace-nowrap">
+                                                        {formatDuration(entry.duration_minutes)}
+                                                    </span>
+                                                    {(entry.agent_id === currentUser?.id || currentUser?.role === 'admin') && (
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => handleEditTimeEntry(entry)} className="text-xs text-gray-400 hover:text-primary-600 transition">Editar</button>
+                                                            <button
+                                                                onClick={() => { if (window.confirm('¿Eliminar este registro?')) deleteTimeEntryMutation.mutate(entry.id); }}
+                                                                className="text-xs text-gray-400 hover:text-red-600 transition"
+                                                            >Eliminar</button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         )}
 
                         {activeTab === 'subtickets' && (
@@ -597,6 +827,16 @@ export default function AgentTicketDetail() {
                                     <div className="text-gray-600">{ticket.contact?.email}</div>
                                     {ticket.contact?.phone && <div className="text-gray-600">{ticket.contact.phone}</div>}
                                 </div>
+                                {ticket.contact?.has_contract && (
+                                    <div className="pt-2 border-t border-gray-100">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${new Date(ticket.contact.contract_end_date) >= new Date() || !ticket.contact.contract_end_date ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                            Contrato: {ticket.contact.contract_type === 'unlimited' ? 'Ilimitado' : ticket.contact.contract_type === 'hours' ? `${ticket.contact.contract_hours_month}h/mes` : 'Activo'}
+                                        </span>
+                                        {ticket.contact.contract_end_date && (
+                                            <div className="text-xs text-gray-400 mt-1">Vence: {new Date(ticket.contact.contract_end_date).toLocaleDateString('es-ES')}</div>
+                                        )}
+                                    </div>
+                                )}
                                 {(ticket.contact_name || ticket.contact_phone) && (
                                     <div className="pt-2 border-t border-gray-100">
                                         <div className="text-xs font-medium text-gray-500 mb-1">Caller Info</div>
@@ -626,6 +866,17 @@ export default function AgentTicketDetail() {
                                         </svg>
                                         Delegate / Create Sub-Ticket
                                     </button>
+                                    <Link
+                                        to={`/agent/tickets/${id}/assistance-sheet`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="w-full bg-white border border-blue-300 text-blue-700 font-medium py-2 px-4 rounded-lg hover:bg-blue-50 transition flex items-center justify-center"
+                                    >
+                                        <svg className="w-5 h-5 mr-2 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                        </svg>
+                                        Hoja de Asistencia PDF
+                                    </Link>
                                 </div>
                             </div>
                         )}
@@ -651,7 +902,19 @@ export default function AgentTicketDetail() {
 
                                 <div>
                                     <label className="block text-gray-600 mb-1">Priority</label>
-                                    <div className="font-medium text-gray-900">{ticket.priority}</div>
+                                    {ticket.priority && (() => {
+                                        const p = priorities.find(x => x.name === ticket.priority);
+                                        return p ? (
+                                            <span
+                                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                                                style={getPriorityBadgeStyle(p.color)}
+                                            >
+                                                {p.name} — {p.label}
+                                            </span>
+                                        ) : (
+                                            <div className="font-medium text-gray-900">{ticket.priority}</div>
+                                        );
+                                    })()}
                                 </div>
 
                                 <div>
@@ -713,11 +976,15 @@ export default function AgentTicketDetail() {
                                 <div>
                                     <label className="block text-gray-600 mb-1">Jira Issue</label>
                                     <input
-                                        type="url"
+                                        type="text"
                                         placeholder="https://jira.example.com/browse/TKT-123"
-                                        value={ticket.jira_issue_link || ''}
-                                        onChange={(e) => updateTicketMutation.mutate({ jira_issue_link: e.target.value })}
-                                        disabled={updateTicketMutation.isPending}
+                                        value={jiraValue}
+                                        onChange={(e) => setJiraValue(e.target.value)}
+                                        onBlur={() => {
+                                            if (jiraValue !== (ticket.jira_issue_link || '')) {
+                                                updateTicketMutation.mutate({ jira_issue_link: jiraValue });
+                                            }
+                                        }}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                                     />
                                     {ticket.jira_issue_link && (
@@ -747,6 +1014,105 @@ export default function AgentTicketDetail() {
                     </div>
                 </div>
             </main>
+
+            {/* Time Entry Modal */}
+            {isTimeEntryModalOpen && (
+                <div className="fixed inset-0 z-50 overflow-y-auto">
+                    <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                        <div className="fixed inset-0 transition-opacity" aria-hidden="true">
+                            <div className="absolute inset-0 bg-gray-500 opacity-75" onClick={() => { setIsTimeEntryModalOpen(false); resetTimeEntryForm(); }}></div>
+                        </div>
+                        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                            <form onSubmit={handleTimeEntrySubmit}>
+                                <div className="bg-white px-4 pt-5 pb-4 sm:p-6">
+                                    <h3 className="text-lg font-medium text-gray-900 mb-4">
+                                        {editingTimeEntry ? 'Editar acción' : 'Registrar acción'}
+                                    </h3>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de asistencia <span className="text-red-500">*</span></label>
+                                            <select
+                                                required
+                                                value={timeEntryForm.assistance_type}
+                                                onChange={(e) => setTimeEntryForm({ ...timeEntryForm, assistance_type: e.target.value })}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                                            >
+                                                <option value="remote">Remoto</option>
+                                                <option value="onsite">Presencial</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Descripción de la acción <span className="text-red-500">*</span></label>
+                                            <textarea
+                                                required
+                                                rows={3}
+                                                value={timeEntryForm.description}
+                                                onChange={(e) => setTimeEntryForm({ ...timeEntryForm, description: e.target.value })}
+                                                placeholder="Describe la acción realizada..."
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Fecha <span className="text-red-500">*</span></label>
+                                            <input
+                                                type="date"
+                                                required
+                                                value={timeEntryForm.date}
+                                                onChange={(e) => setTimeEntryForm({ ...timeEntryForm, date: e.target.value })}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Duración <span className="text-red-500">*</span></label>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    placeholder="0"
+                                                    value={timeEntryForm.hours}
+                                                    onChange={(e) => setTimeEntryForm({ ...timeEntryForm, hours: e.target.value })}
+                                                    className="w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm text-center"
+                                                />
+                                                <span className="text-sm text-gray-500">h</span>
+                                                <select
+                                                    value={timeEntryForm.minutes}
+                                                    onChange={(e) => setTimeEntryForm({ ...timeEntryForm, minutes: e.target.value })}
+                                                    className="w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm"
+                                                >
+                                                    {[0, 15, 30, 45].map(m => <option key={m} value={m}>{String(m).padStart(2, '0')}</option>)}
+                                                </select>
+                                                <span className="text-sm text-gray-500">min</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="bg-gray-50 px-4 py-3 sm:px-6 space-y-2">
+                                    {timeEntryError && (
+                                        <p className="text-sm text-red-600 text-center">{timeEntryError}</p>
+                                    )}
+                                    <div className="sm:flex sm:flex-row-reverse">
+                                        <button
+                                            type="submit"
+                                            disabled={createTimeEntryMutation.isPending || updateTimeEntryMutation.isPending}
+                                            className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                                        >
+                                            {editingTimeEntry ? 'Guardar cambios' : 'Registrar'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setIsTimeEntryModalOpen(false); resetTimeEntryForm(); }}
+                                            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Delegate/Child Ticket Modal */}
             {isDelegateModalOpen && (
@@ -791,10 +1157,9 @@ export default function AgentTicketDetail() {
                                                 onChange={(e) => setDelegateForm({ ...delegateForm, priority: e.target.value })}
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                                             >
-                                                <option value="P1">P1 - Critical</option>
-                                                <option value="P2">P2 - High</option>
-                                                <option value="P3">P3 - Normal</option>
-                                                <option value="P4">P4 - Low</option>
+                                                {priorities.map(p => (
+                                                    <option key={p.name} value={p.name}>{p.name} — {p.label}</option>
+                                                ))}
                                             </select>
                                         </div>
 
@@ -829,6 +1194,42 @@ export default function AgentTicketDetail() {
                                 </div>
                             </form>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Image lightbox */}
+            {lightboxImage && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+                    onClick={() => setLightboxImage(null)}
+                >
+                    <div className="relative max-w-5xl max-h-[90vh] p-2" onClick={e => e.stopPropagation()}>
+                        <img
+                            src={lightboxImage.url}
+                            alt={lightboxImage.name}
+                            className="max-w-full max-h-[85vh] rounded-lg shadow-2xl object-contain"
+                        />
+                        <div className="absolute top-4 right-4 flex gap-2">
+                            <a
+                                href={lightboxImage.url}
+                                download={lightboxImage.name}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-white/90 text-gray-800 text-sm font-medium rounded-lg hover:bg-white transition"
+                                onClick={e => e.stopPropagation()}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Descargar
+                            </a>
+                            <button
+                                onClick={() => setLightboxImage(null)}
+                                className="px-3 py-1.5 bg-white/90 text-gray-800 text-sm font-medium rounded-lg hover:bg-white transition"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <p className="text-white/70 text-sm text-center mt-2">{lightboxImage.name}</p>
                     </div>
                 </div>
             )}

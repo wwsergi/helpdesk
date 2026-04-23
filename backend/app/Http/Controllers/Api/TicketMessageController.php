@@ -28,10 +28,18 @@ class TicketMessageController extends Controller
         }
 
         $validated = $request->validate([
-            'body' => 'required|string',
+            'body'        => 'required|string',
+            'is_solution' => 'nullable|boolean',
         ]);
 
-        $message->update(['body' => $validated['body']]);
+        $isSolution = $validated['is_solution'] ?? $message->is_solution;
+
+        // Only one solution per ticket
+        if ($isSolution && !$message->is_solution) {
+            TicketMessage::where('ticket_id', $message->ticket_id)->where('is_solution', true)->update(['is_solution' => false]);
+        }
+
+        $message->update(['body' => $validated['body'], 'is_solution' => $isSolution]);
 
         return response()->json($message->load(['user', 'contact', 'attachments']));
     }

@@ -49,6 +49,10 @@ class ContactController extends Controller
             }
         }
 
+        if ($request->boolean('all')) {
+            return response()->json($query->orderBy('name')->get(['id', 'name']));
+        }
+
         $perPage = $request->input('per_page', 50);
         return response()->json($query->orderBy('registration_date', 'desc')->orderBy('name')->paginate($perPage));
     }
@@ -69,6 +73,12 @@ class ContactController extends Controller
             'rate' => 'nullable|string|max:255',
             'registration_date' => 'nullable|date',
             'distributor_id' => 'nullable|integer',
+            'has_contract' => 'nullable|boolean',
+            'contract_type' => 'nullable|in:none,hours,unlimited',
+            'contract_hours_month' => 'nullable|integer|min:1',
+            'contract_start_date' => 'nullable|date',
+            'contract_end_date' => 'nullable|date|after_or_equal:contract_start_date',
+            'contract_notes' => 'nullable|string|max:2000',
         ]);
 
         $contact = Contact::create([
@@ -85,6 +95,12 @@ class ContactController extends Controller
             'rate' => $validated['rate'] ?? null,
             'registration_date' => $validated['registration_date'] ?? null,
             'distributor_id' => $validated['distributor_id'] ?? null,
+            'has_contract' => $validated['has_contract'] ?? false,
+            'contract_type' => $validated['contract_type'] ?? 'none',
+            'contract_hours_month' => $validated['contract_hours_month'] ?? null,
+            'contract_start_date' => $validated['contract_start_date'] ?? null,
+            'contract_end_date' => $validated['contract_end_date'] ?? null,
+            'contract_notes' => $validated['contract_notes'] ?? null,
         ]);
 
         // Create associated User for login ONLY if password provided
@@ -126,6 +142,12 @@ class ContactController extends Controller
             'rate' => 'nullable|string|max:255',
             'registration_date' => 'nullable|date',
             'distributor_id' => 'nullable|integer',
+            'has_contract' => 'nullable|boolean',
+            'contract_type' => 'nullable|in:none,hours,unlimited',
+            'contract_hours_month' => 'nullable|integer|min:1',
+            'contract_start_date' => 'nullable|date',
+            'contract_end_date' => 'nullable|date|after_or_equal:contract_start_date',
+            'contract_notes' => 'nullable|string|max:2000',
         ]);
 
         $contact->update([
@@ -141,6 +163,12 @@ class ContactController extends Controller
             'rate' => $validated['rate'] ?? null,
             'registration_date' => $validated['registration_date'] ?? null,
             'distributor_id' => $validated['distributor_id'] ?? null,
+            'has_contract' => $validated['has_contract'] ?? $contact->has_contract,
+            'contract_type' => $validated['contract_type'] ?? $contact->contract_type,
+            'contract_hours_month' => $validated['contract_hours_month'] ?? null,
+            'contract_start_date' => $validated['contract_start_date'] ?? null,
+            'contract_end_date' => $validated['contract_end_date'] ?? null,
+            'contract_notes' => $validated['contract_notes'] ?? null,
         ]);
 
         // Update associated User logic
