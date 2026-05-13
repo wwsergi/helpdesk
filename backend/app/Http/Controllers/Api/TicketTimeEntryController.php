@@ -36,7 +36,7 @@ class TicketTimeEntryController extends Controller
         $ticket = $this->findTicket($request, $ticketId);
 
         $validated = $request->validate([
-            'description'      => 'required|string|max:1000',
+            'description'      => 'required|string|max:2000',
             'assistance_type'  => 'required|in:remote,onsite',
             'date'             => 'required|date',
             'duration_minutes' => 'required|integer|min:1',
@@ -66,7 +66,7 @@ class TicketTimeEntryController extends Controller
         }
 
         $validated = $request->validate([
-            'description'      => 'sometimes|string|max:1000',
+            'description'      => 'sometimes|string|max:2000',
             'assistance_type'  => 'sometimes|in:remote,onsite',
             'date'             => 'sometimes|date',
             'duration_minutes' => 'sometimes|integer|min:1',

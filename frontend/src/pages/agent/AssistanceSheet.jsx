@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
 import apiClient from '../../lib/api';
 
 const WINWORLD_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJ4AAAAcCAYAAACQ/QaoAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyZpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuNi1jMTM4IDc5LjE1OTgyNCwgMjAxNi8wOS8xNC0wMTowOTowMSAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENDIDIwMTcgKFdpbmRvd3MpIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOjZDNjE5NEUyMDQ4OTExRUE5QTFERjlCNDRDRkQ0MzBCIiB4bXBNTTpEb2N1bWVudElEPSJ4bXAuZGlkOjZDNjE5NEUzMDQ4OTExRUE5QTFERjlCNDRDRkQ0MzBCIj4gPHhtcE1NOkRlcml2ZWRGcm9tIHN0UmVmOmluc3RhbmNlSUQ9InhtcC5paWQ6NkM2MTk0RTAwNDg5MTFFQTlBMURGOUI0NENGRDQzMEIiIHN0UmVmOmRvY3VtZW50SUQ9InhtcC5kaWQ6NkM2MTk0RTEwNDg5MTFFQTlBMURGOUI0NENGRDQzMEIiLz4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InIiPz4LkgoSAAAJKUlEQVR42uxc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";
@@ -24,6 +25,8 @@ const STATUS_LABELS = {
 
 export default function AssistanceSheet() {
     const { id } = useParams();
+    const sheetRef = useRef(null);
+    const [generating, setGenerating] = useState(false);
 
     const { data, isLoading, isError } = useQuery({
         queryKey: ['assistance-sheet', id],
@@ -49,6 +52,101 @@ export default function AssistanceSheet() {
     const isContractActive = contact?.has_contract &&
         (!contact.contract_end_date || new Date(contact.contract_end_date) >= new Date());
 
+    const handlePrint = async () => {
+        const el = sheetRef.current;
+        if (!el) return;
+        setGenerating(true);
+        try {
+            const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+                import('html2canvas'),
+                import('jspdf'),
+            ]);
+
+            const SCALE = 2;
+            const PDF_W = 210; const PDF_H = 297; // A4 mm
+            const MT = 14; const MR = 12; const MB = 18; const ML = 12;
+            const CONTENT_W = PDF_W - ML - MR;   // 186 mm
+            const CONTENT_H = PDF_H - MT - MB;   // 265 mm
+
+            // 1. Render full content to canvas
+            const canvas = await html2canvas(el, { scale: SCALE, useCORS: true, logging: false });
+
+            // 2. px-per-mm ratio in the canvas
+            const pxPerMM = canvas.width / CONTENT_W;
+            const pageHeightPx = CONTENT_H * pxPerMM;
+
+            // 3. Collect element boundaries relative to container (in canvas px)
+            const containerRect = el.getBoundingClientRect();
+            const avoidEls = el.querySelectorAll(
+                '.sheet-no-break, .sheet-row-no-break, tr, thead, tfoot'
+            );
+            const boundaries = Array.from(avoidEls).map((node) => {
+                const r = node.getBoundingClientRect();
+                return {
+                    top: (r.top - containerRect.top) * SCALE,
+                    bottom: (r.bottom - containerRect.top) * SCALE,
+                };
+            });
+
+            // 4. Find safe cut: move cut point to just before an element that would be split.
+            //    Only considers elements that (a) start inside the current page,
+            //    (b) would be cut at nominalCut, and (c) fit on one page.
+            //    Picks the one closest to the cut to maximise content per page.
+            const safeCut = (nominalCut, pageStart) => {
+                const candidates = boundaries.filter((b) =>
+                    b.top > pageStart &&
+                    b.top < nominalCut &&
+                    b.bottom > nominalCut &&
+                    (b.bottom - b.top) < pageHeightPx * 0.95
+                );
+                if (!candidates.length) return nominalCut;
+                return candidates.reduce((best, b) => (b.top > best.top ? b : best)).top;
+            };
+
+            // 5. Build page slices
+            const slices = [];
+            let y = 0;
+            while (y < canvas.height) {
+                if (y + pageHeightPx >= canvas.height) {
+                    slices.push({ top: y, height: canvas.height - y });
+                    break;
+                }
+                const cut = safeCut(y + pageHeightPx, y);
+                slices.push({ top: y, height: cut - y });
+                y = cut;
+            }
+
+            // 6. Build PDF
+            const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+            for (let i = 0; i < slices.length; i++) {
+                if (i > 0) pdf.addPage();
+                const { top, height } = slices[i];
+                const sliceCanvas = document.createElement('canvas');
+                sliceCanvas.width = canvas.width;
+                sliceCanvas.height = height;
+                sliceCanvas.getContext('2d').drawImage(
+                    canvas, 0, top, canvas.width, height, 0, 0, canvas.width, height
+                );
+                const sliceHmm = height / pxPerMM;
+                pdf.addImage(sliceCanvas.toDataURL('image/jpeg', 0.95), 'JPEG', ML, MT, CONTENT_W, sliceHmm);
+            }
+
+            // 7. Page numbers
+            const total = slices.length;
+            for (let i = 1; i <= total; i++) {
+                pdf.setPage(i);
+                pdf.setFontSize(8); pdf.setTextColor(150, 150, 150);
+                pdf.text(`Página ${i} de ${total}`, PDF_W / 2, PDF_H - 5, { align: 'center' });
+                pdf.setFontSize(7);
+                pdf.text(ticket.uuid, PDF_W - MR, PDF_H - 5, { align: 'right' });
+            }
+
+            pdf.save(`hoja-asistencia-${ticket.uuid}.pdf`);
+        } finally {
+            setGenerating(false);
+        }
+    };
+
     return (
         <>
             {/* Toolbar */}
@@ -60,21 +158,29 @@ export default function AssistanceSheet() {
                     Volver al ticket
                 </Link>
                 <button
-                    onClick={() => window.print()}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition"
+                    onClick={handlePrint}
+                    disabled={generating}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition disabled:opacity-60"
                 >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                    </svg>
-                    Imprimir / Guardar PDF
+                    {generating ? (
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                        </svg>
+                    ) : (
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                        </svg>
+                    )}
+                    {generating ? 'Generando PDF…' : 'Descargar PDF'}
                 </button>
             </div>
 
             {/* Document */}
-            <div id="sheet" className="max-w-3xl mx-auto px-8 py-6 bg-white min-h-screen">
+            <div id="sheet" ref={sheetRef} className="max-w-3xl mx-auto px-8 py-6 bg-white min-h-screen">
 
                 {/* Header */}
-                <div className="flex justify-between items-center mb-4 pb-3 border-b-2 border-gray-800">
+                <div className="flex justify-between items-center mb-4 pb-3 border-b-2 border-gray-800 sheet-no-break">
                     <div className="flex items-center gap-3">
                         <img src={WINWORLD_LOGO} alt="Winworld" className="h-8 object-contain" />
                         <div className="border-l border-gray-300 pl-3">
@@ -89,7 +195,7 @@ export default function AssistanceSheet() {
                 </div>
 
                 {/* Two-column info */}
-                <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="grid grid-cols-2 gap-4 mb-4 sheet-no-break">
                     <div className="bg-gray-50 rounded p-3 border border-gray-200">
                         <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Cliente</h2>
                         <p className="font-semibold text-gray-900 text-sm">{contact?.name || '—'}</p>
@@ -126,7 +232,7 @@ export default function AssistanceSheet() {
 
                 {/* Description */}
                 {ticket.description && (
-                    <div className="mb-3">
+                    <div className="mb-3 sheet-no-break">
                         <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">Descripción del problema</h2>
                         <div className="bg-gray-50 rounded p-2 border border-gray-200 text-xs text-gray-700 whitespace-pre-wrap leading-snug">
                             {ticket.description}
@@ -136,7 +242,7 @@ export default function AssistanceSheet() {
 
                 {/* Solution */}
                 {ticket.solution && (
-                    <div className="mb-3">
+                    <div className="mb-3 sheet-no-break">
                         <h2 className="text-xs font-semibold uppercase tracking-wider text-green-600 mb-1">Solución</h2>
                         <div className="bg-green-50 rounded p-2 border border-green-200 text-xs text-gray-700 whitespace-pre-wrap leading-snug">
                             {ticket.solution}
@@ -162,7 +268,7 @@ export default function AssistanceSheet() {
                             </thead>
                             <tbody>
                                 {time_entries.map((entry, i) => (
-                                    <tr key={entry.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                    <tr key={entry.id} className={`sheet-row-no-break ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                                         <td className="px-2 py-1 border-b border-gray-100 whitespace-nowrap">{fmtDate(entry.date)}</td>
                                         <td className="px-2 py-1 border-b border-gray-100 whitespace-nowrap">{entry.agent_name || '—'}</td>
                                         <td className="px-2 py-1 border-b border-gray-100 whitespace-nowrap">
@@ -187,7 +293,7 @@ export default function AssistanceSheet() {
 
                 {/* Contract hours summary */}
                 {hours_data && (
-                    <div className="mb-4 bg-blue-50 border border-blue-200 rounded p-3">
+                    <div className="mb-4 bg-blue-50 border border-blue-200 rounded p-3 sheet-no-break">
                         <h2 className="text-xs font-semibold uppercase tracking-wider text-blue-400 mb-2">
                             Horas contratadas — {new Date().toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
                         </h2>
@@ -216,7 +322,7 @@ export default function AssistanceSheet() {
                 )}
 
                 {/* Signature block */}
-                <div className="mt-4 pt-3 border-t-2 border-gray-800">
+                <div className="mt-4 pt-3 border-t-2 border-gray-800 sheet-no-break">
                     <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Aceptación del cliente</h2>
                     <p className="text-xs text-gray-600 mb-4">
                         El abajo firmante confirma haber recibido y verificado la asistencia técnica descrita,
@@ -237,12 +343,16 @@ export default function AssistanceSheet() {
                 </div>
             </div>
 
-            {/* Print styles */}
+            {/* Print styles (fallback for browser print) */}
             <style>{`
                 @media print {
-                    @page { margin: 6mm; size: A4; }
-                    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                    #sheet { zoom: 0.85; padding: 4mm !important; }
+                    @page { size: A4; margin: 14mm 12mm 18mm 12mm; }
+                    html, body { height: auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    #sheet { max-width: none; margin: 0; padding: 0 !important; font-size: 11px; }
+                    .sheet-no-break { break-inside: avoid; page-break-inside: avoid; }
+                    .sheet-row-no-break { break-inside: avoid; page-break-inside: avoid; }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
                 }
             `}</style>
         </>
