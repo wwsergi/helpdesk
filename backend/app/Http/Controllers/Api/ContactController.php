@@ -290,6 +290,7 @@ class ContactController extends Controller
                 } else {
                     Contact::create(array_merge($data, [
                         'tenant_id' => $request->user()->tenant_id,
+                        'sync_source' => 'import',
                     ]));
                     $imported++;
                 }
@@ -400,7 +401,7 @@ class ContactController extends Controller
                             $existing->update(array_merge($contactData, ['external_id' => $externalId]));
                             $updated++;
                         } else {
-                            Contact::create(array_merge($contactData, ['external_id' => $externalId]));
+                            Contact::create(array_merge($contactData, ['external_id' => $externalId, 'sync_source' => 'intratime']));
                             $imported++;
                         }
                     } catch (\Exception $e) {

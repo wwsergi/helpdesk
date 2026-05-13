@@ -13,16 +13,21 @@ class TicketController extends Controller
     public function index(Request $request)
     {
         $assignedToMe = $request->has('assigned_to_me') && $request->assigned_to_me;
+        $filterByContact = $request->filled('contact_id') && in_array($request->user()->role, ['agent', 'admin', 'comercial']);
 
-        $query = Ticket::with(['contact', 'user', 'creator', 'queue', 'messages.user', 'messages.contact'])
+        $query = Ticket::with(['contact', 'user', 'creator', 'queue', 'messages.user', 'messages.contact', 'children.user', 'children.creator'])
             ->withCount('children')
+            ->withSum('timeEntries', 'duration_minutes')
             ->where('tenant_id', $request->user()->tenant_id);
 
-        // "My Tickets" shows all tickets assigned to me, including subtickets delegated to me.
-        // General inbox only shows top-level tickets.
-        if ($assignedToMe) {
+        if ($filterByContact) {
+            // CRM profile view: show all tickets for this contact (no parent restriction)
+            $query->where('contact_id', $request->contact_id);
+        } elseif ($assignedToMe) {
+            // "My Tickets" shows all tickets assigned to me, including subtickets delegated to me.
             $query->where('user_id', $request->user()->id);
         } else {
+            // General inbox only shows top-level tickets.
             $query->whereNull('parent_ticket_id');
         }
 
@@ -96,6 +101,11 @@ class TicketController extends Controller
                             ->orWhere('email', 'like', '%' . $searchTerm . '%');
                     });
             });
+        }
+
+        // Filter by client (inbox use — keeps parent ticket restriction)
+        if ($request->filled('client_id') && in_array($request->user()->role, ['agent', 'admin', 'comercial'])) {
+            $query->where('contact_id', $request->client_id);
         }
 
         // For customers, only show their own tickets and NOT child tickets (internal delegation)
@@ -288,6 +298,8 @@ class TicketController extends Controller
             'ticket_type_id' => 'nullable|exists:ticket_types,id',
             'jira_issue_link' => 'nullable|string|max:500',
             'subject' => 'nullable|string|max:255',
+            'contact_id' => 'nullable|exists:contacts,id',
+            'delegation_comment' => 'nullable|string|max:1000',
         ]);
 
         // Only agents can update tickets, UNLESS customer is marking as RESOLVED
@@ -300,19 +312,20 @@ class TicketController extends Controller
             }
         }
 
+        $previousUserId = $ticket->user_id;
+        $delegationComment = $validated['delegation_comment'] ?? null;
+        unset($validated['delegation_comment']);
+
         if (isset($validated['status'])) {
             if ($validated['status'] === 'RESOLVED' && $ticket->status !== 'RESOLVED') {
                 $validated['resolved_at'] = now();
 
-                // Rule A: Parent Resolved => All Subtickets Resolved
                 $ticket->children()->where('status', '!=', 'RESOLVED')->update([
                     'status' => 'RESOLVED',
                     'resolved_at' => now(),
-                    // Add logic to log this if needed, but direct update is fastest
                 ]);
 
             } elseif (in_array($validated['status'], ['NEW', 'IN_PROGRESS', 'PENDING_CUSTOMER'])) {
-                // If reopening or moving to active state, clear resolved timestamp
                 $validated['resolved_at'] = null;
                 $validated['closed_at'] = null;
             }
@@ -325,7 +338,37 @@ class TicketController extends Controller
             $ticket->update(['status' => 'IN_PROGRESS']);
         }
 
-        return response()->json($ticket->load(['contact', 'user', 'queue', 'children'])); // Reload children to reflect changes if any
+        // Record delegation note when user_id changes
+        if (
+            isset($validated['user_id']) &&
+            $validated['user_id'] != $previousUserId &&
+            $request->user()->role !== 'customer'
+        ) {
+            $newAgent = \App\Models\User::find($validated['user_id']);
+            $prevAgent = $previousUserId ? \App\Models\User::find($previousUserId) : null;
+
+            $prevLabel = $prevAgent
+                ? $prevAgent->name . ($prevAgent->level ? " (L{$prevAgent->level})" : '')
+                : 'Sin asignar';
+            $newLabel = $newAgent
+                ? $newAgent->name . ($newAgent->level ? " (L{$newAgent->level})" : '')
+                : 'Sin asignar';
+
+            $noteBody = "🔀 **Delegado** de {$prevLabel} a {$newLabel}";
+            if ($delegationComment) {
+                $noteBody .= " — {$delegationComment}";
+            }
+
+            \App\Models\TicketMessage::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $request->user()->id,
+                'body' => $noteBody,
+                'is_internal' => true,
+                'is_solution' => false,
+            ]);
+        }
+
+        return response()->json($ticket->load(['contact', 'user', 'queue', 'messages', 'children']));
     }
 
     public function addMessage(Request $request, $id)

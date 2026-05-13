@@ -107,6 +107,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/priorities/{id}', [\App\Http\Controllers\Api\PriorityController::class, 'update']);
     Route::delete('/priorities/{id}', [\App\Http\Controllers\Api\PriorityController::class, 'destroy']);
 
+    // CRM - Deals
+    Route::get('/crm/pipeline', [\App\Http\Controllers\DealController::class, 'pipeline']);
+    Route::apiResource('/deals', \App\Http\Controllers\DealController::class);
+
+    // CRM - Activities
+    Route::apiResource('/activities', \App\Http\Controllers\ActivityController::class);
+
     // Reports (Admin only)
     Route::middleware('admin')->prefix('reports')->group(function () {
         Route::get('/stats', [\App\Http\Controllers\ReportsController::class, 'overallStats']);

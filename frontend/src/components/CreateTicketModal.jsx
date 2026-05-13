@@ -17,7 +17,7 @@ export default function CreateTicketModal({ isOpen, onClose }) {
     const [newTicket, setNewTicket] = useState({
         subject: '',
         description: '',
-        priority: 'P3',
+        priority: 'P4',
         ticket_type_id: '',
         category_id: '',
         contact_name: '',
@@ -94,7 +94,7 @@ export default function CreateTicketModal({ isOpen, onClose }) {
         setNewTicket({
             subject: '',
             description: '',
-            priority: 'P3',
+            priority: 'P4',
             ticket_type_id: '',
             category_id: '',
             contact_name: '',

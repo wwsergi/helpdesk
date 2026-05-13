@@ -20,6 +20,9 @@ import KnowledgeBase from './pages/agent/KnowledgeBase';
 import TicketTypes from './pages/agent/TicketTypes';
 import Priorities from './pages/agent/Priorities';
 import AssistanceSheet from './pages/agent/AssistanceSheet';
+import PipelineBoard from './pages/crm/PipelineBoard';
+import ContactProfile from './pages/crm/ContactProfile';
+import CRMDirectory from './pages/crm/CRMDirectory';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -137,6 +140,23 @@ function App() {
           <Route path="/agent/tickets/:id/assistance-sheet" element={
             <ProtectedRoute allowedRoles={['agent', 'admin']}>
               <AssistanceSheet />
+            </ProtectedRoute>
+          } />
+
+          {/* CRM Routes */}
+          <Route path="/crm/pipeline" element={
+            <ProtectedRoute allowedRoles={['admin', 'comercial']}>
+              <PipelineBoard />
+            </ProtectedRoute>
+          } />
+          <Route path="/crm/directory" element={
+            <ProtectedRoute allowedRoles={['agent', 'admin', 'comercial']}>
+              <CRMDirectory />
+            </ProtectedRoute>
+          } />
+          <Route path="/crm/contacts/:id" element={
+            <ProtectedRoute allowedRoles={['agent', 'admin', 'comercial']}>
+              <ContactProfile />
             </ProtectedRoute>
           } />
 

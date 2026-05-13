@@ -50,6 +50,9 @@ export default function AgentInbox() {
     const [categoryFilter, setCategoryFilter] = useState(() => loadFilter('categoryFilter', []));
     const [dateFrom, setDateFrom] = useState(() => loadFilter('dateFrom', ''));
     const [dateTo, setDateTo] = useState(() => loadFilter('dateTo', ''));
+    const [clientFilter, setClientFilter] = useState(() => loadFilter('clientFilter', ''));
+    const [clientSearch, setClientSearch] = useState('');
+    const [showTotalHours, setShowTotalHours] = useState(false);
     const [page, setPage] = useState(1);
     const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
     const categoryRef = useRef(null);
@@ -63,6 +66,7 @@ export default function AgentInbox() {
     useEffect(() => { sessionStorage.setItem('inbox_categoryFilter', JSON.stringify(categoryFilter)); setPage(1); }, [categoryFilter]);
     useEffect(() => { sessionStorage.setItem('inbox_dateFrom', JSON.stringify(dateFrom)); setPage(1); }, [dateFrom]);
     useEffect(() => { sessionStorage.setItem('inbox_dateTo', JSON.stringify(dateTo)); setPage(1); }, [dateTo]);
+    useEffect(() => { sessionStorage.setItem('inbox_clientFilter', JSON.stringify(clientFilter)); setPage(1); }, [clientFilter]);
 
     // Close category dropdown on outside click
     useEffect(() => {
@@ -89,8 +93,20 @@ export default function AgentInbox() {
     });
     const flatCategories = flattenCategories(Array.isArray(categoriesData) ? categoriesData : []);
 
+    // Fetch contacts for client filter (search-as-you-type)
+    const { data: clientContacts = [] } = useQuery({
+        queryKey: ['contacts-search-inbox', clientSearch],
+        queryFn: async () => {
+            const params = new URLSearchParams({ per_page: 50 });
+            if (clientSearch) params.set('search', clientSearch);
+            const res = await apiClient.get(`/contacts?${params}`);
+            return res.data?.data ?? res.data;
+        },
+        enabled: clientSearch.length > 0,
+    });
+
     const { data: ticketsData, isLoading } = useQuery({
-        queryKey: ['tickets', filter, searchQuery, statusFilter, priorityFilter, categoryFilter, assignedFilter, dateFrom, dateTo, page],
+        queryKey: ['tickets', filter, searchQuery, statusFilter, priorityFilter, categoryFilter, assignedFilter, dateFrom, dateTo, clientFilter, page],
         queryFn: async () => {
             const params = new URLSearchParams();
             if (filter === 'my-tickets') params.append('assigned_to_me', 'true');
@@ -102,6 +118,7 @@ export default function AgentInbox() {
             if (assignedFilter && assignedFilter !== 'all') params.append('assigned_to', assignedFilter);
             if (dateFrom) params.append('date_from', dateFrom);
             if (dateTo) params.append('date_to', dateTo);
+            if (clientFilter) params.append('client_id', clientFilter);
             params.append('page', page);
 
             const response = await apiClient.get(`/tickets?${params.toString()}`);
@@ -113,6 +130,15 @@ export default function AgentInbox() {
     const tickets = ticketsData?.data || [];
     const lastPage = ticketsData?.last_page || 1;
     const total = ticketsData?.total || 0;
+
+    const formatMinutes = (mins) => {
+        if (!mins) return null;
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    };
+
+    const totalPageMinutes = tickets.reduce((acc, t) => acc + (parseInt(t.time_entries_sum_duration_minutes) || 0), 0);
 
     return (
         <AgentLayout>
@@ -313,6 +339,45 @@ export default function AgentInbox() {
                         </select>
                     </div>
 
+                    {/* Client Filter */}
+                    <div className="flex-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">Cliente</label>
+                        {clientFilter ? (
+                            <div className="flex items-center gap-2">
+                                <span className="flex-1 px-3 py-2 bg-indigo-50 border border-indigo-200 rounded-lg text-sm text-indigo-800 font-medium truncate">
+                                    {clientContacts.find(c => String(c.id) === String(clientFilter))?.name
+                                        || tickets.find(t => String(t.contact?.id) === String(clientFilter))?.contact?.name
+                                        || 'Cliente seleccionado'}
+                                </span>
+                                <button onClick={() => { setClientFilter(''); setClientSearch(''); }} className="text-gray-400 hover:text-red-500 transition text-lg leading-none">×</button>
+                            </div>
+                        ) : (
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Buscar cliente..."
+                                    value={clientSearch}
+                                    onChange={(e) => setClientSearch(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                                />
+                                {clientSearch.length > 0 && clientContacts.length > 0 && (
+                                    <ul className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                        {clientContacts.map(c => (
+                                            <li
+                                                key={c.id}
+                                                onMouseDown={() => { setClientFilter(String(c.id)); setClientSearch(''); }}
+                                                className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-50"
+                                            >
+                                                <span className="font-medium text-gray-900">{c.name}</span>
+                                                {c.email && <span className="text-gray-400 ml-1">({c.email})</span>}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
                     {/* Date From */}
                     <div className="flex-1">
                         <label className="block text-xs font-medium text-gray-700 mb-1">From Date</label>
@@ -335,7 +400,33 @@ export default function AgentInbox() {
                         />
                     </div>
                 </div>
+
+                {/* Mostrar total horas */}
+                <div className="mt-4 flex items-center gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                            type="checkbox"
+                            checked={showTotalHours}
+                            onChange={(e) => setShowTotalHours(e.target.checked)}
+                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                        />
+                        <span className="text-xs font-medium text-gray-700">Mostrar total horas</span>
+                    </label>
+                </div>
             </div>
+
+            {/* Barra de total horas */}
+            {showTotalHours && totalPageMinutes > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 mb-4 flex items-center gap-3">
+                    <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-sm text-blue-700">
+                        Total horas en esta página: <span className="font-bold">{formatMinutes(totalPageMinutes)}</span>
+                        <span className="text-blue-500 ml-1">({tickets.filter(t => t.time_entries_sum_duration_minutes > 0).length} tickets con tiempo registrado)</span>
+                    </span>
+                </div>
+            )}
 
             {/* Ticket List */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
@@ -383,17 +474,53 @@ export default function AgentInbox() {
                                                     </span>
                                                 );
                                             })()}
+                                            {ticket.time_entries_sum_duration_minutes > 0 && (
+                                                <span className="px-2 py-1 text-xs font-medium rounded bg-blue-50 text-blue-700 flex items-center gap-1">
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    {formatMinutes(ticket.time_entries_sum_duration_minutes)}
+                                                </span>
+                                            )}
                                             {(ticket.sla_first_response_breached || ticket.sla_resolution_breached) && (
                                                 <span className="px-2 py-1 text-xs font-medium rounded bg-red-100 text-red-800">
                                                     SLA BREACH
                                                 </span>
                                             )}
                                             {ticket.children_count > 0 && (
-                                                <span className="px-2 py-1 text-xs font-medium rounded bg-amber-100 text-amber-800 flex items-center gap-1">
-                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                                    </svg>
-                                                    {ticket.children_count} sub-ticket{ticket.children_count > 1 ? 's' : ''}
+                                                <span className="relative group/delegado" onClick={e => e.preventDefault()}>
+                                                    <span className="px-2 py-1 text-xs font-medium rounded bg-orange-100 text-orange-700 cursor-default select-none">
+                                                        Delegado
+                                                    </span>
+                                                    <div className="pointer-events-none absolute hidden group-hover/delegado:block z-50 top-full left-0 mt-1.5 w-60 bg-gray-900 text-white text-xs rounded-lg p-2.5 shadow-xl">
+                                                        <div className="font-semibold text-gray-300 mb-2">Historial de asignación</div>
+                                                        {/* Origen */}
+                                                        <div className="flex items-start gap-2 pb-1.5">
+                                                            <span className="mt-0.5 w-2 h-2 rounded-full bg-blue-400 flex-shrink-0"></span>
+                                                            <div>
+                                                                <div className="text-gray-400">Creado por</div>
+                                                                <div className="text-white font-medium">{ticket.creator?.name || '—'}</div>
+                                                            </div>
+                                                        </div>
+                                                        {/* Delegaciones */}
+                                                        {ticket.children?.map((child, i) => (
+                                                            <div key={child.id} className="flex items-start gap-2 pt-1.5 border-t border-gray-700">
+                                                                <span className="mt-0.5 w-2 h-2 rounded-full bg-orange-400 flex-shrink-0"></span>
+                                                                <div>
+                                                                    <div className="text-gray-400">Delegado por {child.creator?.name || '—'}</div>
+                                                                    <div className="text-white font-medium">{child.user?.name || 'Sin asignar'}</div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                        {/* Asignación actual en el padre */}
+                                                        <div className="flex items-start gap-2 pt-1.5 border-t border-gray-700">
+                                                            <span className="mt-0.5 w-2 h-2 rounded-full bg-green-400 flex-shrink-0"></span>
+                                                            <div>
+                                                                <div className="text-gray-400">Asignado ahora</div>
+                                                                <div className="text-white font-medium">{ticket.user?.name || 'Sin asignar'}</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </span>
                                             )}
                                         </div>

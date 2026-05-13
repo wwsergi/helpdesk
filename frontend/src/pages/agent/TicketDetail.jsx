@@ -23,7 +23,7 @@ export default function AgentTicketDetail() {
     const navigate = useNavigate();
     const isL2Agent = currentUser?.level == 2;
     const [replyText, setReplyText] = useState('');
-    const [isInternal, setIsInternal] = useState(isL2Agent);
+    const [isInternal, setIsInternal] = useState(true);
     const [isSolution, setIsSolution] = useState(false);
     const [files, setFiles] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
@@ -45,13 +45,15 @@ export default function AgentTicketDetail() {
     const [timeEntryError, setTimeEntryError] = useState('');
     const [delegateForm, setDelegateForm] = useState({
         user_id: '',
-        priority: 'P2',
+        priority: 'P4',
         comment: ''
     });
     const [editingMessageId, setEditingMessageId] = useState(null);
     const [editingMessageBody, setEditingMessageBody] = useState('');
     const [editingTitle, setEditingTitle] = useState(false);
     const [titleValue, setTitleValue] = useState('');
+    const [isEditingContact, setIsEditingContact] = useState(false);
+    const [contactSearch, setContactSearch] = useState('');
     const queryClient = useQueryClient();
 
     const { data: ticket, isLoading } = useQuery({
@@ -87,6 +89,17 @@ export default function AgentTicketDetail() {
         },
     });
 
+    const { data: contacts } = useQuery({
+        queryKey: ['contacts-search', contactSearch],
+        queryFn: async () => {
+            const params = new URLSearchParams({ per_page: 50 });
+            if (contactSearch) params.set('search', contactSearch);
+            const response = await apiClient.get(`/contacts?${params}`);
+            return response.data?.data ?? response.data;
+        },
+        enabled: isEditingContact,
+    });
+
     const { data: ticketTypes } = useQuery({
         queryKey: ['ticket-types'],
         queryFn: async () => {
@@ -107,7 +120,7 @@ export default function AgentTicketDetail() {
             setReplyText('');
             setFiles([]);
             setIsSolution(false);
-            if (!ticket?.parent_ticket_id && !isL2Agent) setIsInternal(false);
+            if (!ticket?.parent_ticket_id && !isL2Agent) setIsInternal(true);
         },
     });
 
@@ -115,14 +128,18 @@ export default function AgentTicketDetail() {
         mutationFn: async (data) => {
             return await apiClient.patch(`/tickets/${id}`, data);
         },
-        onSuccess: (response) => {
+        onSuccess: (response, variables) => {
             const updatedTicket = response.data;
-            queryClient.setQueryData(['ticket', id], (old) => ({
-                ...old,
-                ...updatedTicket,
-                messages: old?.messages ?? updatedTicket.messages,
-                children: old?.children ?? updatedTicket.children,
-            }));
+            if ('contact_id' in variables || 'delegation_comment' in variables) {
+                queryClient.invalidateQueries({ queryKey: ['ticket', id] });
+            } else {
+                queryClient.setQueryData(['ticket', id], (old) => ({
+                    ...old,
+                    ...updatedTicket,
+                    messages: old?.messages ?? updatedTicket.messages,
+                    children: old?.children ?? updatedTicket.children,
+                }));
+            }
             if (updatedTicket.status) {
                 setSelectedStatus(updatedTicket.status);
             }
@@ -136,13 +153,17 @@ export default function AgentTicketDetail() {
                 ...data,
                 parent_ticket_id: id,
                 type: 'OTHER',
-                contact_id: ticket.contact_id
+                contact_id: ticket.contact_id,
             });
         },
-        onSuccess: () => {
+        onSuccess: async (_, variables) => {
+            if (variables.user_id) {
+                await apiClient.patch(`/tickets/${id}`, { user_id: variables.user_id });
+            }
             queryClient.invalidateQueries({ queryKey: ['ticket', id] });
+            queryClient.invalidateQueries({ queryKey: ['tickets'] });
             setIsDelegateModalOpen(false);
-            setDelegateForm({ user_id: '', priority: 'P2', comment: '' });
+            setDelegateForm({ user_id: '', priority: 'P4', comment: '' });
         },
     });
 
@@ -456,22 +477,6 @@ export default function AgentTicketDetail() {
                                 >
                                     Conversation
                                 </button>
-                                {!ticket.parent_ticket_id && (
-                                    <button
-                                        onClick={() => setActiveTab('subtickets')}
-                                        className={`${activeTab === 'subtickets'
-                                            ? 'border-primary-500 text-primary-600'
-                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center`}
-                                    >
-                                        Sub-tickets
-                                        {ticket.children?.length > 0 && (
-                                            <span className="ml-2 bg-amber-100 text-amber-800 py-0.5 px-2 rounded-full text-xs font-semibold">
-                                                {ticket.children.length}
-                                            </span>
-                                        )}
-                                    </button>
-                                )}
                                 <button
                                     onClick={() => setActiveTab('tiempos')}
                                     className={`${activeTab === 'tiempos'
@@ -643,11 +648,11 @@ export default function AgentTicketDetail() {
                                                     <label className="flex items-center cursor-pointer">
                                                         <input
                                                             type="checkbox"
-                                                            checked={isInternal}
-                                                            onChange={(e) => setIsInternal(e.target.checked)}
-                                                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                                            checked={!isInternal}
+                                                            onChange={(e) => setIsInternal(!e.target.checked)}
+                                                            className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
                                                         />
-                                                        <span className="ml-2 text-sm text-gray-700">Nota interna</span>
+                                                        <span className="ml-2 text-sm text-gray-700">Visible para cliente</span>
                                                     </label>
                                                 )}
                                                 <label className="flex items-center cursor-pointer">
@@ -752,105 +757,95 @@ export default function AgentTicketDetail() {
                             </div>
                         )}
 
-                        {activeTab === 'subtickets' && (
-                            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                                <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-lg font-semibold text-gray-900">Sub-Tickets <span className="text-gray-400 font-normal text-base">(Delegated work)</span></h2>
-                                    <button
-                                        onClick={() => setIsDelegateModalOpen(true)}
-                                        className="text-sm bg-primary-600 text-white px-3 py-1.5 rounded-lg hover:bg-primary-700 font-medium transition"
-                                    >
-                                        + Create Sub-Ticket
-                                    </button>
-                                </div>
-
-                                {ticket.children && ticket.children.length > 0 ? (
-                                    <div className="space-y-3">
-                                        {ticket.children.map(child => {
-                                            const isResolved = child.status === 'RESOLVED';
-                                            const statusBorderColor = isResolved ? 'border-l-green-400' : 'border-l-yellow-400';
-                                            const statusBadge = isResolved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
-                                            return (
-                                                <div key={child.id} className={`p-4 bg-gray-50 rounded-lg border border-gray-100 border-l-4 ${statusBorderColor}`}>
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-2 flex-wrap">
-                                                            {child.user?.level && (
-                                                                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">
-                                                                    L{child.user.level}
-                                                                </span>
-                                                            )}
-                                                            <span className="font-medium text-gray-900">
-                                                                {child.user?.name || 'Unassigned'}
-                                                            </span>
-                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusBadge}`}>
-                                                                {child.status.replace('_', ' ')}
-                                                            </span>
-                                                            {child.priority && (
-                                                                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                                                                    {child.priority}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        <span className="text-xs font-mono text-gray-400">{child.uuid}</span>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <div className="text-center py-10 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                                        <svg className="w-10 h-10 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                        </svg>
-                                        <p className="text-gray-500 mb-2 font-medium">No sub-tickets yet</p>
-                                        <p className="text-sm text-gray-400 mb-4">Delegate part of this ticket to another agent</p>
-                                        <button
-                                            onClick={() => setIsDelegateModalOpen(true)}
-                                            className="text-primary-600 hover:text-primary-800 text-sm font-medium border border-primary-300 px-4 py-1.5 rounded-lg hover:bg-primary-50 transition"
-                                        >
-                                            + Create Sub-Ticket
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
                     </div>
 
                     {/* Sidebar */}
                     <div className="space-y-6">
                         {/* Customer Info */}
                         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                            <h2 className="text-lg font-semibold text-gray-900 mb-4">Customer</h2>
-                            <div className="space-y-2 text-sm">
-                                <div>
-                                    <div className="font-medium text-gray-900">{ticket.contact?.name || 'Unknown'}</div>
-                                    <div className="text-gray-600">{ticket.contact?.email}</div>
-                                    {ticket.contact?.phone && <div className="text-gray-600">{ticket.contact.phone}</div>}
-                                </div>
-                                {ticket.contact?.has_contract && (
-                                    <div className="pt-2 border-t border-gray-100">
-                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${new Date(ticket.contact.contract_end_date) >= new Date() || !ticket.contact.contract_end_date ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                            Contrato: {ticket.contact.contract_type === 'unlimited' ? 'Ilimitado' : ticket.contact.contract_type === 'hours' ? `${ticket.contact.contract_hours_month}h/mes` : 'Activo'}
-                                        </span>
-                                        {ticket.contact.contract_end_date && (
-                                            <div className="text-xs text-gray-400 mt-1">Vence: {new Date(ticket.contact.contract_end_date).toLocaleDateString('es-ES')}</div>
-                                        )}
-                                    </div>
-                                )}
-                                {(ticket.contact_name || ticket.contact_phone) && (
-                                    <div className="pt-2 border-t border-gray-100">
-                                        <div className="text-xs font-medium text-gray-500 mb-1">Caller Info</div>
-                                        {ticket.contact_name && <div className="font-medium text-gray-800">{ticket.contact_name}</div>}
-                                        {ticket.contact_phone && <div className="text-gray-600">{ticket.contact_phone}</div>}
-                                    </div>
-                                )}
-                                {ticket.creator && (
-                                    <div className="pt-2 border-t border-gray-100">
-                                        <div className="text-xs font-medium text-gray-500 mb-1">Created by</div>
-                                        <div className="font-medium text-gray-800">{ticket.creator.name}</div>
-                                    </div>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-lg font-semibold text-gray-900">Customer</h2>
+                                {ticket.status !== 'CLOSED' && !isEditingContact && (
+                                    <button
+                                        type="button"
+                                        onClick={() => { setIsEditingContact(true); setContactSearch(''); }}
+                                        className="text-xs text-gray-400 hover:text-primary-600 transition flex items-center gap-1"
+                                        title="Cambiar cliente"
+                                    >
+                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-1a2 2 0 01.586-1.414z" />
+                                        </svg>
+                                        Cambiar cliente
+                                    </button>
                                 )}
                             </div>
+
+                            {isEditingContact ? (
+                                <div className="space-y-2">
+                                    <input
+                                        autoFocus
+                                        type="text"
+                                        placeholder="Buscar cliente..."
+                                        value={contactSearch}
+                                        onChange={(e) => setContactSearch(e.target.value)}
+                                        className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                                    />
+                                    <select
+                                        size={5}
+                                        className="w-full border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none"
+                                        value={ticket.contact_id || ''}
+                                        onChange={(e) => {
+                                            updateTicketMutation.mutate({ contact_id: e.target.value || null });
+                                            setIsEditingContact(false);
+                                        }}
+                                    >
+                                        <option value="">— Sin cliente —</option>
+                                        {(contacts || []).map(c => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.name}{c.email ? ` (${c.email})` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsEditingContact(false)}
+                                        className="text-xs text-gray-500 hover:text-gray-700 transition"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 text-sm">
+                                    <div>
+                                        <div className="font-medium text-gray-900">{ticket.contact?.name || 'Unknown'}</div>
+                                        <div className="text-gray-600">{ticket.contact?.email}</div>
+                                        {ticket.contact?.phone && <div className="text-gray-600">{ticket.contact.phone}</div>}
+                                    </div>
+                                    {ticket.contact?.has_contract && (
+                                        <div className="pt-2 border-t border-gray-100">
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${new Date(ticket.contact.contract_end_date) >= new Date() || !ticket.contact.contract_end_date ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                Contrato: {ticket.contact.contract_type === 'unlimited' ? 'Ilimitado' : ticket.contact.contract_type === 'hours' ? `${ticket.contact.contract_hours_month}h/mes` : 'Activo'}
+                                            </span>
+                                            {ticket.contact.contract_end_date && (
+                                                <div className="text-xs text-gray-400 mt-1">Vence: {new Date(ticket.contact.contract_end_date).toLocaleDateString('es-ES')}</div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {(ticket.contact_name || ticket.contact_phone) && (
+                                        <div className="pt-2 border-t border-gray-100">
+                                            <div className="text-xs font-medium text-gray-500 mb-1">Caller Info</div>
+                                            {ticket.contact_name && <div className="font-medium text-gray-800">{ticket.contact_name}</div>}
+                                            {ticket.contact_phone && <div className="text-gray-600">{ticket.contact_phone}</div>}
+                                        </div>
+                                    )}
+                                    {ticket.creator && (
+                                        <div className="pt-2 border-t border-gray-100">
+                                            <div className="text-xs font-medium text-gray-500 mb-1">Created by</div>
+                                            <div className="font-medium text-gray-800">{ticket.creator.name}</div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {!ticket.parent_ticket_id && (
@@ -864,7 +859,7 @@ export default function AgentTicketDetail() {
                                         <svg className="w-5 h-5 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                                         </svg>
-                                        Delegate / Create Sub-Ticket
+                                        Delegate
                                     </button>
                                     <Link
                                         to={`/agent/tickets/${id}/assistance-sheet`}
@@ -902,19 +897,19 @@ export default function AgentTicketDetail() {
 
                                 <div>
                                     <label className="block text-gray-600 mb-1">Priority</label>
-                                    {ticket.priority && (() => {
-                                        const p = priorities.find(x => x.name === ticket.priority);
-                                        return p ? (
-                                            <span
-                                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"
-                                                style={getPriorityBadgeStyle(p.color)}
-                                            >
+                                    <select
+                                        value={ticket.priority || ''}
+                                        onChange={(e) => updateTicketMutation.mutate({ priority: e.target.value })}
+                                        disabled={updateTicketMutation.isPending}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    >
+                                        <option value="">Sin prioridad</option>
+                                        {priorities.map((p) => (
+                                            <option key={p.name} value={p.name}>
                                                 {p.name} — {p.label}
-                                            </span>
-                                        ) : (
-                                            <div className="font-medium text-gray-900">{ticket.priority}</div>
-                                        );
-                                    })()}
+                                            </option>
+                                        ))}
+                                    </select>
                                 </div>
 
                                 <div>
@@ -1128,20 +1123,20 @@ export default function AgentTicketDetail() {
                             <form onSubmit={handleDelegateSubmit}>
                                 <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                                     <h3 className="text-lg leading-6 font-medium text-gray-900 mb-1">
-                                        Assign Secondary Agent
+                                        Delegar ticket
                                     </h3>
-                                    <p className="text-sm text-gray-500 mb-4">Delegate support for this ticket to another agent. A note will be added to the conversation.</p>
+                                    <p className="text-sm text-gray-500 mb-4">Reasigna este ticket a otro agente. Se registrará una nota interna con el historial de asignación.</p>
 
                                     <div className="space-y-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Assign To <span className="text-red-500">*</span></label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Asignar a <span className="text-red-500">*</span></label>
                                             <select
                                                 required
                                                 value={delegateForm.user_id}
                                                 onChange={(e) => setDelegateForm({ ...delegateForm, user_id: e.target.value })}
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                                             >
-                                                <option value="">Select Agent...</option>
+                                                <option value="">Seleccionar agente...</option>
                                                 {agents?.map(agent => (
                                                     <option key={agent.id} value={agent.id}>
                                                         {agent.name}{agent.level ? ` (L${agent.level})` : ''}
@@ -1151,7 +1146,7 @@ export default function AgentTicketDetail() {
                                         </div>
 
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Priority <span className="text-red-500">*</span></label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Prioridad <span className="text-red-500">*</span></label>
                                             <select
                                                 value={delegateForm.priority}
                                                 onChange={(e) => setDelegateForm({ ...delegateForm, priority: e.target.value })}
@@ -1164,12 +1159,12 @@ export default function AgentTicketDetail() {
                                         </div>
 
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Comment <span className="text-gray-400 font-normal">(visible in conversation)</span></label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Comentario <span className="text-gray-400 font-normal">(visible en la conversación)</span></label>
                                             <textarea
                                                 rows={3}
                                                 value={delegateForm.comment}
                                                 onChange={(e) => setDelegateForm({ ...delegateForm, comment: e.target.value })}
-                                                placeholder="Optional instructions or context for the assigned agent..."
+                                                placeholder="Instrucciones o contexto opcional para el agente asignado..."
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                                             />
                                         </div>
@@ -1182,7 +1177,7 @@ export default function AgentTicketDetail() {
                                         disabled={createChildTicketMutation.isPending}
                                         className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary-600 text-base font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:ml-3 sm:w-auto sm:text-sm"
                                     >
-                                        {createChildTicketMutation.isPending ? 'Creating...' : 'Create Sub-Ticket'}
+                                        {createChildTicketMutation.isPending ? 'Delegando...' : 'Delegar'}
                                     </button>
                                     <button
                                         type="button"
