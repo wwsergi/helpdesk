@@ -55,6 +55,8 @@ return [
             'prefix' => '',
             'strict' => false,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
+                // Connect/read timeout (s): no colgar workers si el host no responde.
+                \PDO::ATTR_TIMEOUT => 10,
                 (PHP_VERSION_ID >= 80500 ? \Pdo\Mysql::ATTR_SSL_CA : \PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_PANELADMIN_ATTR_SSL_CA'),
             ]) : [],
         ],

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class StatisticsController extends Controller
@@ -125,32 +126,55 @@ class StatisticsController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        $granularity = $request->input('granularity', 'month');
-        $dateFrom    = $request->input('date_from');
-        $dateTo      = $request->input('date_to');
+        $granularity = $request->input('granularity') === 'day' ? 'day' : 'month';
         $source      = $request->input('source'); // 'manual' | 'employee' | null
-
         $format = $granularity === 'day' ? '%Y-%m-%d' : '%Y-%m';
 
+        // El rango de fechas SIEMPRE va acotado: nunca lanzar un GROUP BY sobre toda
+        // la tabla login_logout (puede tener millones de filas y saturaría la BD de
+        // producción de Intratime). Sin fechas → últimos 12 meses; tope duro 24 meses.
+        $maxMonths = 24;
         try {
-            $query = \Illuminate\Support\Facades\DB::connection('paneladmin')
-                ->table('login_logout')
+            $to = $request->filled('date_to') ? Carbon::parse($request->date_to)->endOfDay() : Carbon::now()->endOfDay();
+        } catch (\Throwable $e) {
+            $to = Carbon::now()->endOfDay();
+        }
+        try {
+            $from = $request->filled('date_from') ? Carbon::parse($request->date_from)->startOfDay() : $to->copy()->subMonths(12)->startOfDay();
+        } catch (\Throwable $e) {
+            $from = $to->copy()->subMonths(12)->startOfDay();
+        }
+        if ($from->greaterThan($to)) {
+            $from = $to->copy()->subMonths(12)->startOfDay();
+        }
+        if ($from->lessThan($to->copy()->subMonths($maxMonths))) {
+            $from = $to->copy()->subMonths($maxMonths)->startOfDay();
+        }
+
+        try {
+            $conn = \Illuminate\Support\Facades\DB::connection('paneladmin');
+
+            // Tope de ejecución en el servidor: MySQL aborta la SELECT si supera el
+            // límite, evitando que una consulta pesada sature la BD origen. Solo
+            // afecta a sentencias SELECT de solo lectura.
+            $conn->statement('SET SESSION max_execution_time = 15000'); // 15s
+
+            $query = $conn->table('login_logout')
                 ->whereNull('INOUT_DELETED_AT')
                 ->whereIn('INOUT_TYPE', [0, 1, 2, 3])
+                ->where('INOUT_DATE', '>=', $from->format('Y-m-d H:i:s'))
+                ->where('INOUT_DATE', '<=', $to->format('Y-m-d H:i:s'))
                 ->selectRaw("DATE_FORMAT(INOUT_DATE, ?) as period, INOUT_TYPE as type, COUNT(*) as count", [$format])
                 ->groupBy('period', 'type')
                 ->orderBy('period');
-
-            if ($dateFrom) $query->where('INOUT_DATE', '>=', $dateFrom);
-            if ($dateTo)   $query->where('INOUT_DATE', '<=', $dateTo . ' 23:59:59');
 
             if ($source === 'manual')   $query->where('INOUT_SOURCE', 3);
             if ($source === 'employee') $query->where('INOUT_SOURCE', '!=', 3);
 
             $rows = $query->get();
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::error('Paneladmin fichajes query failed: ' . $e->getMessage());
-            return response()->json(['error' => 'No se pudo conectar con la base de datos de fichajes.'], 503);
+            return response()->json(['error' => 'No se pudo conectar o la consulta de fichajes superó el tiempo límite.'], 503);
         }
 
         $typeMap = [0 => 'entrada', 1 => 'salida', 2 => 'pausa', 3 => 'regreso'];
