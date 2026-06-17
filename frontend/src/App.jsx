@@ -23,6 +23,7 @@ import AssistanceSheet from './pages/agent/AssistanceSheet';
 import PipelineBoard from './pages/crm/PipelineBoard';
 import ContactProfile from './pages/crm/ContactProfile';
 import CRMDirectory from './pages/crm/CRMDirectory';
+import Statistics from './pages/crm/Statistics';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -152,6 +153,11 @@ function App() {
           <Route path="/crm/directory" element={
             <ProtectedRoute allowedRoles={['agent', 'admin', 'comercial']}>
               <CRMDirectory />
+            </ProtectedRoute>
+          } />
+          <Route path="/crm/statistics" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <Statistics />
             </ProtectedRoute>
           } />
           <Route path="/crm/contacts/:id" element={

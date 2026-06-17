@@ -3,20 +3,110 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Contact;
 use App\Models\Ticket;
 use App\Models\TicketMessage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class TicketController extends Controller
 {
     public function index(Request $request)
     {
+        $query = $this->buildFilteredQuery($request);
+
+        if ($query === null) {
+            return response()->json(['data' => [], 'total' => 0]);
+        }
+
+        $query->with(['contact', 'user', 'creator', 'queue', 'messages.user', 'messages.contact', 'children.user', 'children.creator'])
+            ->withCount('children');
+
+        $this->applySort($query, $request);
+
+        // Aggregate totals across ALL filtered tickets (not just current page)
+        // Used by the inbox "show total hours" toggle so the total stays
+        // consistent while paginating.
+        $totalMinutesAll = (int) \DB::table('ticket_time_entries')
+            ->whereIn('ticket_id', (clone $query)->reorder()->select('tickets.id'))
+            ->sum('duration_minutes');
+
+        $ticketsWithTimeCount = (clone $query)->whereHas('timeEntries')->count();
+
+        $tickets = $query->paginate(20);
+
+        $payload = $tickets->toArray();
+        $payload['total_minutes_all'] = $totalMinutesAll;
+        $payload['tickets_with_time_count'] = $ticketsWithTimeCount;
+
+        return response()->json($payload);
+    }
+
+    /**
+     * Export the currently filtered ticket list to an Excel (.xlsx) file.
+     * Honours the same filters/sort as the inbox listing (no pagination).
+     */
+    public function export(Request $request)
+    {
+        $query = $this->buildFilteredQuery($request);
+
+        if ($query === null) {
+            $query = Ticket::query()->whereRaw('1 = 0');
+        }
+
+        $query->with('contact');
+        $this->applySort($query, $request);
+
+        $tickets = $query->get();
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Asistencias');
+
+        $headers = ['Nº Asistencia', 'Cliente', 'Descripción', 'Fecha', 'Tiempo'];
+        $sheet->fromArray($headers, null, 'A1');
+        $sheet->getStyle('A1:E1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:E1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+
+        $row = 2;
+        foreach ($tickets as $ticket) {
+            $minutes = (int) $ticket->time_entries_sum_duration_minutes;
+            $sheet->setCellValueExplicit("A{$row}", $ticket->uuid, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue("B{$row}", $ticket->contact->name ?? '');
+            $sheet->setCellValue("C{$row}", $ticket->subject);
+            $sheet->setCellValue("D{$row}", optional($ticket->created_at)->format('d/m/Y H:i'));
+            $sheet->setCellValue("E{$row}", $this->formatMinutes($minutes));
+            $row++;
+        }
+
+        foreach (range('A', 'E') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'asistencias-' . now()->format('Ymd-His') . '.xlsx';
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /**
+     * Build the ticket query with all inbox filters applied (no ordering or
+     * pagination). Returns null when the request resolves to "no results"
+     * (e.g. a customer with no matching contact).
+     */
+    private function buildFilteredQuery(Request $request)
+    {
         $assignedToMe = $request->has('assigned_to_me') && $request->assigned_to_me;
         $filterByContact = $request->filled('contact_id') && in_array($request->user()->role, ['agent', 'admin', 'comercial']);
 
-        $query = Ticket::with(['contact', 'user', 'creator', 'queue', 'messages.user', 'messages.contact', 'children.user', 'children.creator'])
-            ->withCount('children')
+        $query = Ticket::query()
             ->withSum('timeEntries', 'duration_minutes')
             ->where('tenant_id', $request->user()->tenant_id);
 
@@ -110,20 +200,57 @@ class TicketController extends Controller
 
         // For customers, only show their own tickets and NOT child tickets (internal delegation)
         if ($request->user()->role === 'customer') {
-            $contact = \App\Models\Contact::where('email', $request->user()->email)
+            $contact = Contact::where('email', $request->user()->email)
                 ->where('tenant_id', $request->user()->tenant_id)
                 ->first();
 
             if (!$contact) {
-                return response()->json(['data' => [], 'total' => 0]);
+                return null;
             }
 
             $query->where('contact_id', $contact->id);
         }
 
-        $tickets = $query->orderBy('created_at', 'desc')->paginate(20);
+        return $query;
+    }
 
-        return response()->json($tickets);
+    /**
+     * Apply ordering to the ticket query based on the `sort` request param.
+     * Supports client name (asc/desc) and creation date (asc/desc).
+     */
+    private function applySort($query, Request $request)
+    {
+        $sort = $request->get('sort', 'created_desc');
+
+        switch ($sort) {
+            case 'client_asc':
+            case 'client_desc':
+                $dir = $sort === 'client_asc' ? 'asc' : 'desc';
+                // Order by the related contact name via a correlated subquery so
+                // we don't disturb the withSum/withCount aggregate selects.
+                $query->orderBy(
+                    Contact::select('name')->whereColumn('contacts.id', 'tickets.contact_id'),
+                    $dir
+                )->orderBy('tickets.created_at', 'desc');
+                break;
+            case 'created_asc':
+                $query->orderBy('created_at', 'asc');
+                break;
+            case 'created_desc':
+            default:
+                $query->orderBy('created_at', 'desc');
+                break;
+        }
+    }
+
+    private function formatMinutes(?int $minutes): string
+    {
+        if (!$minutes) {
+            return '0min';
+        }
+        $h = intdiv($minutes, 60);
+        $m = $minutes % 60;
+        return $h > 0 ? "{$h}h {$m}min" : "{$m}min";
     }
 
     public function store(Request $request)

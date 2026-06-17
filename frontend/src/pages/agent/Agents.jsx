@@ -5,6 +5,33 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../lib/api';
 import AgentLayout from '../../components/agent/AgentLayout';
 
+const fmtDateTime = (str) => {
+    if (!str) return '—';
+    return new Date(str).toLocaleString('es-ES', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    });
+};
+
+// Light user-agent summary (browser + OS) for readability; full string on hover.
+const summarizeUA = (ua) => {
+    if (!ua) return 'Desconocido';
+    let browser = 'Navegador';
+    if (/edg/i.test(ua)) browser = 'Edge';
+    else if (/chrome|crios/i.test(ua)) browser = 'Chrome';
+    else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
+    else if (/safari/i.test(ua)) browser = 'Safari';
+
+    let os = '';
+    if (/windows/i.test(ua)) os = 'Windows';
+    else if (/iphone|ipad|ios/i.test(ua)) os = 'iOS';
+    else if (/mac os/i.test(ua)) os = 'macOS';
+    else if (/android/i.test(ua)) os = 'Android';
+    else if (/linux/i.test(ua)) os = 'Linux';
+
+    return os ? `${browser} · ${os}` : browser;
+};
+
 export default function Agents() {
     const { user: currentUser, logout } = useAuthStore();
     const [searchQuery, setSearchQuery] = useState('');
@@ -19,8 +46,24 @@ export default function Agents() {
         level: '',
     });
     const [error, setError] = useState(null);
+    const [loginsAgent, setLoginsAgent] = useState(null);
+    const [loginsPage, setLoginsPage] = useState(1);
 
     const queryClient = useQueryClient();
+
+    const { data: loginsData, isLoading: loginsLoading } = useQuery({
+        queryKey: ['agent-logins', loginsAgent?.id, loginsPage],
+        queryFn: async () => {
+            const response = await apiClient.get(`/agents/${loginsAgent.id}/logins?page=${loginsPage}`);
+            return response.data;
+        },
+        enabled: !!loginsAgent,
+    });
+
+    const openLogins = (agent) => {
+        setLoginsAgent(agent);
+        setLoginsPage(1);
+    };
 
     const { data: agents, isLoading } = useQuery({
         queryKey: ['agents', searchQuery],
@@ -220,6 +263,12 @@ export default function Agents() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                             <button
+                                                onClick={() => openLogins(agent)}
+                                                className="text-gray-600 hover:text-gray-900 mr-4"
+                                            >
+                                                Accesos
+                                            </button>
+                                            <button
                                                 onClick={() => handleEdit(agent)}
                                                 className="text-primary-600 hover:text-primary-900 mr-4"
                                             >
@@ -346,6 +395,80 @@ export default function Agents() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Login history modal */}
+            {loginsAgent && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 flex-shrink-0">
+                            <div>
+                                <h2 className="text-xl font-bold text-gray-900">Registro de accesos</h2>
+                                <p className="text-sm text-gray-500">{loginsAgent.name} · {loginsAgent.email}</p>
+                            </div>
+                            <button onClick={() => setLoginsAgent(null)} className="text-gray-400 hover:text-gray-600">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-y-auto flex-1">
+                            {loginsLoading ? (
+                                <div className="flex justify-center py-10">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                                </div>
+                            ) : (loginsData?.data?.length ?? 0) === 0 ? (
+                                <p className="text-center text-gray-500 py-10">Sin registros de acceso.</p>
+                            ) : (
+                                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha y hora</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {loginsData.data.map((log) => (
+                                            <tr key={log.id} className="hover:bg-gray-50">
+                                                <td className="px-3 py-2 whitespace-nowrap text-gray-700">{fmtDateTime(log.created_at)}</td>
+                                                <td className="px-3 py-2 whitespace-nowrap">
+                                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${log.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                        {log.status === 'success' ? 'Correcto' : 'Fallido'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 whitespace-nowrap text-gray-500 font-mono text-xs">{log.ip_address || '—'}</td>
+                                                <td className="px-3 py-2 text-gray-500" title={log.user_agent || ''}>{summarizeUA(log.user_agent)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                        {loginsData && loginsData.last_page > 1 && (
+                            <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
+                                <p className="text-sm text-gray-500">Página {loginsData.current_page} de {loginsData.last_page}</p>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setLoginsPage((p) => Math.max(1, p - 1))}
+                                        disabled={loginsPage === 1}
+                                        className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        Anterior
+                                    </button>
+                                    <button
+                                        onClick={() => setLoginsPage((p) => Math.min(loginsData.last_page, p + 1))}
+                                        disabled={loginsPage === loginsData.last_page}
+                                        className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        Siguiente
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

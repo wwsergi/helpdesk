@@ -52,7 +52,9 @@ export default function AgentInbox() {
     const [dateTo, setDateTo] = useState(() => loadFilter('dateTo', ''));
     const [clientFilter, setClientFilter] = useState(() => loadFilter('clientFilter', ''));
     const [clientSearch, setClientSearch] = useState('');
+    const [sortBy, setSortBy] = useState(() => loadFilter('sortBy', 'created_desc'));
     const [showTotalHours, setShowTotalHours] = useState(false);
+    const [exporting, setExporting] = useState(false);
     const [page, setPage] = useState(1);
     const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
     const categoryRef = useRef(null);
@@ -67,6 +69,7 @@ export default function AgentInbox() {
     useEffect(() => { sessionStorage.setItem('inbox_dateFrom', JSON.stringify(dateFrom)); setPage(1); }, [dateFrom]);
     useEffect(() => { sessionStorage.setItem('inbox_dateTo', JSON.stringify(dateTo)); setPage(1); }, [dateTo]);
     useEffect(() => { sessionStorage.setItem('inbox_clientFilter', JSON.stringify(clientFilter)); setPage(1); }, [clientFilter]);
+    useEffect(() => { sessionStorage.setItem('inbox_sortBy', JSON.stringify(sortBy)); setPage(1); }, [sortBy]);
 
     // Close category dropdown on outside click
     useEffect(() => {
@@ -105,26 +108,57 @@ export default function AgentInbox() {
         enabled: clientSearch.length > 0,
     });
 
+    // Build the shared filter/sort params (everything except pagination), so the
+    // list query and the Excel export stay perfectly in sync.
+    const buildFilterParams = () => {
+        const params = new URLSearchParams();
+        if (filter === 'my-tickets') params.append('assigned_to_me', 'true');
+        if (filter === 'unassigned') params.append('unassigned', 'true');
+        if (searchQuery) params.append('search', searchQuery);
+        if (statusFilter.length > 0) params.append('status', statusFilter.join(','));
+        if (priorityFilter.length > 0) params.append('priority', priorityFilter.join(','));
+        if (categoryFilter.length > 0) params.append('category_id', categoryFilter.join(','));
+        if (assignedFilter && assignedFilter !== 'all') params.append('assigned_to', assignedFilter);
+        if (dateFrom) params.append('date_from', dateFrom);
+        if (dateTo) params.append('date_to', dateTo);
+        if (clientFilter) params.append('client_id', clientFilter);
+        if (sortBy && sortBy !== 'created_desc') params.append('sort', sortBy);
+        return params;
+    };
+
     const { data: ticketsData, isLoading } = useQuery({
-        queryKey: ['tickets', filter, searchQuery, statusFilter, priorityFilter, categoryFilter, assignedFilter, dateFrom, dateTo, clientFilter, page],
+        queryKey: ['tickets', filter, searchQuery, statusFilter, priorityFilter, categoryFilter, assignedFilter, dateFrom, dateTo, clientFilter, sortBy, page],
         queryFn: async () => {
-            const params = new URLSearchParams();
-            if (filter === 'my-tickets') params.append('assigned_to_me', 'true');
-            if (filter === 'unassigned') params.append('unassigned', 'true');
-            if (searchQuery) params.append('search', searchQuery);
-            if (statusFilter.length > 0) params.append('status', statusFilter.join(','));
-            if (priorityFilter.length > 0) params.append('priority', priorityFilter.join(','));
-            if (categoryFilter.length > 0) params.append('category_id', categoryFilter.join(','));
-            if (assignedFilter && assignedFilter !== 'all') params.append('assigned_to', assignedFilter);
-            if (dateFrom) params.append('date_from', dateFrom);
-            if (dateTo) params.append('date_to', dateTo);
-            if (clientFilter) params.append('client_id', clientFilter);
+            const params = buildFilterParams();
             params.append('page', page);
 
             const response = await apiClient.get(`/tickets?${params.toString()}`);
             return response.data;
         },
     });
+
+    const handleExport = async () => {
+        setExporting(true);
+        try {
+            const params = buildFilterParams();
+            const response = await apiClient.get(`/tickets/export?${params.toString()}`, {
+                responseType: 'blob',
+            });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `asistencias-${new Date().toISOString().slice(0, 10)}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Export failed', err);
+            alert('No se pudo generar el Excel. Inténtalo de nuevo.');
+        } finally {
+            setExporting(false);
+        }
+    };
 
 
     const tickets = ticketsData?.data || [];
@@ -138,7 +172,8 @@ export default function AgentInbox() {
         return h > 0 ? `${h}h ${m}m` : `${m}m`;
     };
 
-    const totalPageMinutes = tickets.reduce((acc, t) => acc + (parseInt(t.time_entries_sum_duration_minutes) || 0), 0);
+    const totalAllMinutes = parseInt(ticketsData?.total_minutes_all) || 0;
+    const ticketsWithTimeCount = parseInt(ticketsData?.tickets_with_time_count) || 0;
 
     return (
         <AgentLayout>
@@ -147,12 +182,32 @@ export default function AgentInbox() {
                     <h1 className="text-2xl font-bold text-gray-900">Inbox</h1>
                     <p className="text-sm text-gray-600">{total} tickets</p>
                 </div>
-                <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition"
-                >
-                    Create Ticket
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleExport}
+                        disabled={exporting}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 font-semibold rounded-lg hover:bg-gray-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        title="Exportar a Excel los tickets filtrados"
+                    >
+                        {exporting ? (
+                            <svg className="w-4 h-4 animate-spin text-gray-500" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                            </svg>
+                        ) : (
+                            <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                            </svg>
+                        )}
+                        {exporting ? 'Generando…' : 'Exportar Excel'}
+                    </button>
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="px-4 py-2 bg-primary-600 text-white font-semibold rounded-lg hover:bg-primary-700 transition"
+                    >
+                        Create Ticket
+                    </button>
+                </div>
             </div>
 
             {/* Filters & Search */}
@@ -189,18 +244,33 @@ export default function AgentInbox() {
                         </button>
                     </div>
 
-                    {/* Search */}
-                    <div className="relative">
-                        <input
-                            type="text"
-                            placeholder="Search tickets..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full md:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                        />
-                        <svg className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
+                    {/* Sort + Search */}
+                    <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                            <label className="text-xs font-medium text-gray-500 whitespace-nowrap">Ordenar por</label>
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value)}
+                                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm bg-white"
+                            >
+                                <option value="created_desc">Fecha (más reciente)</option>
+                                <option value="created_asc">Fecha (más antigua)</option>
+                                <option value="client_asc">Cliente (A → Z)</option>
+                                <option value="client_desc">Cliente (Z → A)</option>
+                            </select>
+                        </div>
+                        <div className="relative">
+                            <input
+                                type="text"
+                                placeholder="Search tickets..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full md:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            />
+                            <svg className="absolute left-3 top-2.5 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
                     </div>
                 </div>
 
@@ -416,14 +486,14 @@ export default function AgentInbox() {
             </div>
 
             {/* Barra de total horas */}
-            {showTotalHours && totalPageMinutes > 0 && (
+            {showTotalHours && totalAllMinutes > 0 && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 mb-4 flex items-center gap-3">
                     <svg className="w-4 h-4 text-blue-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <span className="text-sm text-blue-700">
-                        Total horas en esta página: <span className="font-bold">{formatMinutes(totalPageMinutes)}</span>
-                        <span className="text-blue-500 ml-1">({tickets.filter(t => t.time_entries_sum_duration_minutes > 0).length} tickets con tiempo registrado)</span>
+                        Total horas (todos los tickets filtrados): <span className="font-bold">{formatMinutes(totalAllMinutes)}</span>
+                        <span className="text-blue-500 ml-1">({ticketsWithTimeCount} tickets con tiempo registrado)</span>
                     </span>
                 </div>
             )}

@@ -43,6 +43,22 @@ return [
             'transaction_mode' => 'DEFERRED',
         ],
 
+        'paneladmin' => [
+            'driver' => 'mysql',
+            'host' => env('DB_PANELADMIN_HOST', '127.0.0.1'),
+            'port' => env('DB_PANELADMIN_PORT', '3306'),
+            'database' => env('DB_PANELADMIN_DATABASE', 'intratime'),
+            'username' => env('DB_PANELADMIN_USERNAME', 'root'),
+            'password' => env('DB_PANELADMIN_PASSWORD', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'strict' => false,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? \Pdo\Mysql::ATTR_SSL_CA : \PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_PANELADMIN_ATTR_SSL_CA'),
+            ]) : [],
+        ],
+
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),

@@ -48,6 +48,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Tickets
     Route::get('/tickets', [TicketController::class, 'index']);
+    Route::get('/tickets/export', [TicketController::class, 'export']);
     Route::post('/tickets', [TicketController::class, 'store']);
     Route::get('/tickets/{id}', [TicketController::class, 'show']);
     Route::patch('/tickets/{id}', [TicketController::class, 'update']);
@@ -74,6 +75,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/contacts/{id}', [\App\Http\Controllers\Api\ContactController::class, 'update']);
     Route::delete('/contacts/{id}', [\App\Http\Controllers\Api\ContactController::class, 'destroy']);
 
+    // Projects (nested under contacts)
+    Route::get('/contacts/{contactId}/projects', [\App\Http\Controllers\Api\ProjectController::class, 'index']);
+    Route::post('/contacts/{contactId}/projects', [\App\Http\Controllers\Api\ProjectController::class, 'store']);
+    Route::patch('/contacts/{contactId}/projects/{id}', [\App\Http\Controllers\Api\ProjectController::class, 'update']);
+    Route::delete('/contacts/{contactId}/projects/{id}', [\App\Http\Controllers\Api\ProjectController::class, 'destroy']);
+
     // Agents list (accessible to all agents for assignment/delegation)
     Route::get('/agents', [\App\Http\Controllers\Api\AgentController::class, 'index']);
     Route::get('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'show']);
@@ -83,6 +90,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/agents', [\App\Http\Controllers\Api\AgentController::class, 'store']);
         Route::patch('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'update']);
         Route::delete('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'destroy']);
+        Route::get('/agents/{id}/logins', [\App\Http\Controllers\Api\AgentController::class, 'logins']);
     });
 
     // Categories
@@ -119,9 +127,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/stats', [\App\Http\Controllers\ReportsController::class, 'overallStats']);
         Route::get('/agents', [\App\Http\Controllers\ReportsController::class, 'agentStats']);
         Route::get('/customers', [\App\Http\Controllers\ReportsController::class, 'customerStats']);
-Route::get('/distributors', [\App\Http\Controllers\ReportsController::class, 'distributorStats']);
+        Route::get('/distributors', [\App\Http\Controllers\ReportsController::class, 'distributorStats']);
     });
+
+    // Paneladmin Statistics (Admin only)
+    Route::middleware('admin')->get('/statistics/totals', [\App\Http\Controllers\Api\StatisticsController::class, 'totals']);
+    Route::middleware('admin')->get('/statistics/registrations', [\App\Http\Controllers\Api\StatisticsController::class, 'registrations']);
+    Route::middleware('admin')->get('/statistics/fichajes', [\App\Http\Controllers\Api\StatisticsController::class, 'fichajes']);
 
     // Dashboard
     Route::get('/dashboard/stats', [\App\Http\Controllers\Api\DashboardController::class, 'stats']);
+    Route::get('/dashboard/kpis',  [\App\Http\Controllers\Api\DashboardController::class, 'kpis']);
 });

@@ -200,7 +200,7 @@ export default function CustomerTicketDetail() {
                                                                     href={att.url}
                                                                     onClick={(e) => {
                                                                         e.preventDefault();
-                                                                        apiClient.get(att.url, { responseType: 'blob' })
+                                                                        apiClient.get(`/attachments/${att.id}`, { responseType: 'blob' })
                                                                             .then(response => {
                                                                                 const url = window.URL.createObjectURL(new Blob([response.data]));
                                                                                 const link = document.createElement('a');

@@ -205,7 +205,7 @@ export default function AssistanceSheet() {
                         {isContractActive && (
                             <div className="mt-2 pt-2 border-t border-gray-200">
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
-                                    {contact.contract_type === 'unlimited' ? 'Contrato ilimitado' : `Contrato ${contact.contract_hours_month}h/mes`}
+                                    {contact.contract_type === 'unlimited' ? 'Contrato de Mantenimiento' : `Contrato ${contact.contract_hours_month}h/mes`}
                                 </span>
                                 {contact.contract_end_date && (
                                     <p className="text-xs text-gray-400 mt-0.5">Vigente hasta: {fmtDate(contact.contract_end_date)}</p>

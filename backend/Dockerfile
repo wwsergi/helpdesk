@@ -34,6 +34,9 @@ RUN composer install --no-dev --optimize-autoloader
 # Set permissions
 RUN chmod -R 775 storage bootstrap/cache
 
+# Create storage symlink so /storage/* URLs serve uploaded files
+RUN php artisan storage:link || true
+
 # Copy Nginx configuration
 COPY docker/nginx.conf /etc/nginx/sites-available/default
 

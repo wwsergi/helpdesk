@@ -7,7 +7,6 @@ use App\Models\Contact;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Password;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -22,7 +21,8 @@ class ContactController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('cif', 'like', "%{$search}%");
             });
         }
 
@@ -37,6 +37,47 @@ class ContactController extends Controller
             }
         }
 
+        if ($request->has('is_lead') && $request->is_lead !== null && $request->is_lead !== '') {
+            $isLead = filter_var($request->is_lead, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($isLead !== null) {
+                $query->where('is_lead', $isLead);
+            }
+        }
+
+        if ($request->has('contract_category')) {
+            $rawCats = $request->input('contract_category');
+            if ($rawCats !== null && $rawCats !== '') {
+                $cats = array_values(array_filter(
+                    is_array($rawCats) ? $rawCats : [$rawCats],
+                    fn ($v) => $v !== null && $v !== ''
+                ));
+
+                if (!empty($cats)) {
+                    $hasLead   = in_array('lead', $cats);
+                    $hasSinCat = in_array('sin_categoria', $cats);
+                    $others    = array_values(array_filter($cats, fn ($c) => $c !== 'lead' && $c !== 'sin_categoria'));
+
+                    $query->where(function ($q) use ($hasLead, $hasSinCat, $others) {
+                        $first = true;
+                        if ($hasLead) {
+                            $q->where('is_lead', true);
+                            $first = false;
+                        }
+                        if (!empty($others)) {
+                            $first
+                                ? $q->whereIn('contract_category', $others)
+                                : $q->orWhereIn('contract_category', $others);
+                            $first = false;
+                        }
+                        if ($hasSinCat) {
+                            $clause = fn ($q2) => $q2->whereNull('contract_category')->where('is_lead', false);
+                            $first ? $q->where($clause) : $q->orWhere($clause);
+                        }
+                    });
+                }
+            }
+        }
+
         if ($request->filled('distributor')) {
             if ($request->distributor == 2) {
                 // Winworld filter: catch 2, null, empty, or anything that isn't 1
@@ -47,6 +88,22 @@ class ContactController extends Controller
             } else {
                 $query->where('distributor_id', $request->distributor);
             }
+        }
+
+        if ($request->filled('sync_source')) {
+            if ($request->sync_source === 'manual') {
+                $query->whereNull('sync_source');
+            } else {
+                $query->where('sync_source', $request->sync_source);
+            }
+        }
+
+        if ($request->filled('date_from')) {
+            $query->where('registration_date', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->where('registration_date', '<=', $request->date_to);
         }
 
         if ($request->boolean('all')) {
@@ -312,125 +369,13 @@ class ContactController extends Controller
 
     public function sync(Request $request)
     {
-        $adminUrl = config('services.intratime.admin_url');
-        $adminToken = config('services.intratime.admin_token');
+        $tenantId = (int) $request->user()->tenant_id;
+        $artisan = base_path('artisan');
 
-        if (!$adminUrl || !$adminToken) {
-            return response()->json(['message' => 'Intratime API credentials are not configured.'], 500);
-        }
-
-        $adminUrl = rtrim($adminUrl, '/');
-
-        $page = 1;
-        $imported = 0;
-        $updated = 0;
-        $skipped = 0;
-
-        try {
-            do {
-                $response = Http::withToken($adminToken)
-                    ->acceptJson()
-                    ->post("{$adminUrl}/api/helpdesk/sync-companies", [
-                        'page' => $page,
-                        'per_page' => 200,
-                    ]);
-
-                if (!$response->successful()) {
-                    Log::error('Intratime Sync Error: ' . $response->body());
-                    return response()->json(['message' => 'Failed to fetch companies from Intratime API'], 500);
-                }
-
-                $data = $response->json();
-
-                // Handle different API response structures (paginated vs array list)
-                $companies = isset($data['data']) ? $data['data'] : (isset($data['items']) ? $data['items'] : $data);
-
-                if (empty($companies) || !is_array($companies)) {
-                    break;
-                }
-
-                $tenantId = $request->user()->tenant_id;
-
-                // Collect all external_ids and emails for this page batch
-                $externalIds = array_filter(array_map(fn($c) => (string)($c['unique_id'] ?? $c['id'] ?? ''), $companies));
-                $emails = array_filter(array_map(fn($c) => $c['email'] ?? null, $companies));
-
-                // Load existing contacts matching this batch in 2 queries
-                $byExternalId = Contact::where('tenant_id', $tenantId)
-                    ->whereIn('external_id', $externalIds)
-                    ->get()->keyBy('external_id');
-
-                $byEmail = Contact::where('tenant_id', $tenantId)
-                    ->whereIn('email', $emails)
-                    ->get()->keyBy('email');
-
-                foreach ($companies as $company) {
-                    $externalId = (string) ($company['unique_id'] ?? $company['id'] ?? '');
-
-                    if (!$externalId) {
-                        $skipped++;
-                        continue;
-                    }
-
-                    $contactData = [
-                        'tenant_id' => $tenantId,
-                        'name' => $company['name'] ?? 'Unknown Company',
-                        'email' => $company['email'] ?? null,
-                        'cif' => $company['cif'] ?? null,
-                        'phone' => $company['phone'] ?? null,
-                        'subscription_plan' => $company['plan'] ?? null,
-                        'max_users' => $company['max_users'] ?? null,
-                        'active' => $company['active'] ?? true,
-                        'billing_mode' => $company['cycle'] ?? null,
-                        'distributor_id' => $company['distributor_id'] ?? null,
-                    ];
-
-                    // Match by external_id first, then fall back to email
-                    $existing = $byExternalId[$externalId]
-                        ?? (!empty($contactData['email']) ? ($byEmail[$contactData['email']] ?? null) : null);
-
-                    try {
-                        if ($existing) {
-                            // If email is taken by a different contact, skip updating it
-                            if (!empty($contactData['email'])) {
-                                $emailOwner = $byEmail[$contactData['email']] ?? null;
-                                if ($emailOwner && $emailOwner->id !== $existing->id) {
-                                    unset($contactData['email']);
-                                }
-                            }
-                            $existing->update(array_merge($contactData, ['external_id' => $externalId]));
-                            $updated++;
-                        } else {
-                            Contact::create(array_merge($contactData, ['external_id' => $externalId, 'sync_source' => 'intratime']));
-                            $imported++;
-                        }
-                    } catch (\Exception $e) {
-                        Log::warning("Sync: skipped external_id={$externalId} — " . $e->getMessage());
-                        $skipped++;
-                    }
-                }
-
-                $lastPage = 1;
-                if (isset($data['meta']['last_page'])) {
-                    $lastPage = $data['meta']['last_page'];
-                } elseif (isset($data['last_page'])) {
-                    $lastPage = $data['last_page'];
-                }
-
-                $page++;
-
-            } while ($page <= $lastPage);
-
-        } catch (\Exception $e) {
-            Log::error('Intratime Sync Exception: ' . $e->getMessage());
-            return response()->json(['message' => 'An error occurred during sync.'], 500);
-        }
+        exec("php {$artisan} paneladmin:sync-clients --tenant={$tenantId} > /dev/null 2>&1 &");
 
         return response()->json([
-            'message' => 'Sync completed successfully.',
-            'imported' => $imported,
-            'updated' => $updated,
-            'skipped' => $skipped,
-        ]);
+            'message' => 'Sync iniciado. Los contactos se actualizarán en aproximadamente 1 minuto.',
+        ], 202);
     }
 }

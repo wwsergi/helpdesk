@@ -6,12 +6,22 @@ import AgentLayout from '../../components/agent/AgentLayout';
 
 export default function CRMDirectory() {
     const [searchQuery, setSearchQuery] = useState('');
+    const [activeFilter, setActiveFilter] = useState('');
+    const [contractCategoryFilter, setContractCategoryFilter] = useState('');
     const [page, setPage] = useState(1);
 
     const { data: contacts, isLoading } = useQuery({
-        queryKey: ['contacts', searchQuery, page],
+        queryKey: ['contacts', searchQuery, activeFilter, contractCategoryFilter, page],
         queryFn: async () => {
-            const response = await apiClient.get(`/contacts?search=${searchQuery}&page=${page}&per_page=25`);
+            const params = new URLSearchParams({
+                search: searchQuery,
+                page,
+                per_page: 25
+            });
+            if (activeFilter) params.append('active', activeFilter);
+            if (contractCategoryFilter) params.append('contract_category', contractCategoryFilter);
+            
+            const response = await apiClient.get(`/contacts?${params.toString()}`);
             return response.data;
         },
     });
@@ -28,9 +38,9 @@ export default function CRMDirectory() {
                 </div>
             </div>
 
-            {/* Search */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
-                <div className="relative max-w-md">
+            {/* Filters */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4 flex flex-col md:flex-row gap-4">
+                <div className="relative flex-1">
                     <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
@@ -41,6 +51,30 @@ export default function CRMDirectory() {
                         placeholder="Buscar por nombre o email..."
                         className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     />
+                </div>
+                
+                <div className="flex gap-4">
+                    <select
+                        value={activeFilter}
+                        onChange={e => { setActiveFilter(e.target.value); setPage(1); }}
+                        className="py-2 pl-3 pr-8 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+                    >
+                        <option value="">Todos los estados</option>
+                        <option value="true">Activos</option>
+                        <option value="false">Inactivos</option>
+                    </select>
+                    
+                    <select
+                        value={contractCategoryFilter}
+                        onChange={e => { setContractCategoryFilter(e.target.value); setPage(1); }}
+                        className="py-2 pl-3 pr-8 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white"
+                    >
+                        <option value="">Todos los contratos</option>
+                        <option value="winworld">Winworld</option>
+                        <option value="conversia">Conversia</option>
+                        <option value="conversia22">Conversia22</option>
+                        <option value="lead">Lead</option>
+                    </select>
                 </div>
             </div>
 
@@ -79,6 +113,12 @@ export default function CRMDirectory() {
                             <div className="flex flex-wrap gap-1.5 mt-3">
                                 {contact.subscription_plan && (
                                     <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">{contact.subscription_plan}</span>
+                                )}
+                                {contact.is_lead && (
+                                    <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">Lead</span>
+                                )}
+                                {contact.contract_category && (
+                                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-medium rounded-full capitalize">{contact.contract_category}</span>
                                 )}
                                 <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${contact.active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                     {contact.active ? 'Activo' : 'Inactivo'}

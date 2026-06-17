@@ -9,11 +9,12 @@ class Contact extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['tenant_id', 'name', 'contact_person', 'email', 'phone', 'external_id', 'sync_source', 'cif', 'subscription_plan', 'max_users', 'billing_mode', 'rate', 'registration_date', 'active', 'distributor_id', 'has_contract', 'contract_type', 'contract_hours_month', 'contract_start_date', 'contract_end_date', 'contract_notes'];
+    protected $fillable = ['tenant_id', 'name', 'contact_person', 'email', 'phone', 'external_id', 'sync_source', 'cif', 'subscription_plan', 'max_users', 'billing_mode', 'rate', 'registration_date', 'active', 'distributor_id', 'has_contract', 'contract_type', 'contract_category', 'is_lead', 'contract_hours_month', 'contract_start_date', 'contract_end_date', 'contract_notes'];
 
     protected $casts = [
         'has_contract' => 'boolean',
         'active' => 'boolean',
+        'is_lead' => 'boolean',
     ];
 
     public function tenant()
@@ -34,5 +35,10 @@ class Contact extends Model
     public function activities()
     {
         return $this->hasMany(Activity::class);
+    }
+
+    public function projects()
+    {
+        return $this->hasMany(Project::class);
     }
 }

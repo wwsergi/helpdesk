@@ -7,14 +7,57 @@ import FileUpload from '../../components/FileUpload';
 import { usePriorities, getPriorityBadgeStyle } from '../../hooks/usePriorities';
 
 function ImageThumb({ att, onClick }) {
+    const [blobUrl, setBlobUrl] = useState(null);
+
+    useEffect(() => {
+        let revoked = false;
+        let createdUrl = null;
+        apiClient.get(`/attachments/${att.id}`, { responseType: 'blob' })
+            .then(response => {
+                if (revoked) return;
+                createdUrl = window.URL.createObjectURL(response.data);
+                setBlobUrl(createdUrl);
+            })
+            .catch(err => console.error('Image load failed', err));
+        return () => {
+            revoked = true;
+            if (createdUrl) window.URL.revokeObjectURL(createdUrl);
+        };
+    }, [att.id]);
+
+    if (!blobUrl) {
+        return (
+            <div className="w-24 h-24 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center">
+                <svg className="w-6 h-6 text-gray-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+            </div>
+        );
+    }
+
     return (
         <img
-            src={att.preview_url}
+            src={blobUrl}
             alt={att.name}
-            onClick={() => onClick(att.preview_url, att.name)}
+            onClick={() => onClick(blobUrl, att.name)}
             className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80 transition border border-gray-200"
         />
     );
+}
+
+function downloadAttachment(att) {
+    apiClient.get(`/attachments/${att.id}`, { responseType: 'blob' })
+        .then(response => {
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', att.name);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        })
+        .catch(err => console.error('Download failed', err));
 }
 
 export default function AgentTicketDetail() {
@@ -592,18 +635,17 @@ export default function AgentTicketDetail() {
                                                             {message.attachments.filter(a => !a.mime_type?.startsWith('image/')).length > 0 && (
                                                                 <div className="flex flex-wrap gap-2">
                                                                     {message.attachments.filter(a => !a.mime_type?.startsWith('image/')).map(att => (
-                                                                        <a
+                                                                        <button
                                                                             key={att.id}
-                                                                            href={att.preview_url}
-                                                                            target="_blank"
-                                                                            rel="noopener noreferrer"
+                                                                            type="button"
+                                                                            onClick={() => downloadAttachment(att)}
                                                                             className="flex items-center px-3 py-1.5 bg-white border border-gray-200 rounded text-sm text-primary-600 hover:text-primary-700 hover:border-primary-300 transition"
                                                                         >
                                                                             <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
                                                                             </svg>
                                                                             {att.name} <span className="text-gray-400 ml-1">({(att.size / 1024).toFixed(0)}KB)</span>
-                                                                        </a>
+                                                                        </button>
                                                                     ))}
                                                                 </div>
                                                             )}
@@ -824,7 +866,7 @@ export default function AgentTicketDetail() {
                                     {ticket.contact?.has_contract && (
                                         <div className="pt-2 border-t border-gray-100">
                                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${new Date(ticket.contact.contract_end_date) >= new Date() || !ticket.contact.contract_end_date ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                Contrato: {ticket.contact.contract_type === 'unlimited' ? 'Ilimitado' : ticket.contact.contract_type === 'hours' ? `${ticket.contact.contract_hours_month}h/mes` : 'Activo'}
+                                                Contrato: {ticket.contact.contract_type === 'unlimited' ? 'Mantenimiento' : ticket.contact.contract_type === 'hours' ? `${ticket.contact.contract_hours_month}h/mes` : 'Activo'}
                                             </span>
                                             {ticket.contact.contract_end_date && (
                                                 <div className="text-xs text-gray-400 mt-1">Vence: {new Date(ticket.contact.contract_end_date).toLocaleDateString('es-ES')}</div>
