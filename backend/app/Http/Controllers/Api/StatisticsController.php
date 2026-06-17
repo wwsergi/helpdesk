@@ -130,10 +130,10 @@ class StatisticsController extends Controller
         $source      = $request->input('source'); // 'manual' | 'employee' | null
         $format = $granularity === 'day' ? '%Y-%m-%d' : '%Y-%m';
 
-        // El rango de fechas SIEMPRE va acotado: nunca lanzar un GROUP BY sobre toda
-        // la tabla login_logout (puede tener millones de filas y saturaría la BD de
-        // producción de Intratime). Sin fechas → últimos 12 meses; tope duro 24 meses.
-        $maxMonths = 24;
+        // Lee de la tabla local pre-agregada `fichaje_daily_stats` (poblada por el
+        // comando nocturno `fichajes:aggregate`). NO consulta Intratime aquí: una
+        // vista del dashboard nunca golpea los 73M de filas de login_logout.
+        $maxMonths = 60;
         try {
             $to = $request->filled('date_to') ? Carbon::parse($request->date_to)->endOfDay() : Carbon::now()->endOfDay();
         } catch (\Throwable $e) {
@@ -151,31 +151,15 @@ class StatisticsController extends Controller
             $from = $to->copy()->subMonths($maxMonths)->startOfDay();
         }
 
-        try {
-            $conn = \Illuminate\Support\Facades\DB::connection('paneladmin');
-
-            // Tope de ejecución en el servidor: MySQL aborta la SELECT si supera el
-            // límite, evitando que una consulta pesada sature la BD origen. Solo
-            // afecta a sentencias SELECT de solo lectura.
-            $conn->statement('SET SESSION max_execution_time = 15000'); // 15s
-
-            $query = $conn->table('login_logout')
-                ->whereNull('INOUT_DELETED_AT')
-                ->whereIn('INOUT_TYPE', [0, 1, 2, 3])
-                ->where('INOUT_DATE', '>=', $from->format('Y-m-d H:i:s'))
-                ->where('INOUT_DATE', '<=', $to->format('Y-m-d H:i:s'))
-                ->selectRaw("DATE_FORMAT(INOUT_DATE, ?) as period, INOUT_TYPE as type, COUNT(*) as count", [$format])
-                ->groupBy('period', 'type')
-                ->orderBy('period');
-
-            if ($source === 'manual')   $query->where('INOUT_SOURCE', 3);
-            if ($source === 'employee') $query->where('INOUT_SOURCE', '!=', 3);
-
-            $rows = $query->get();
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('Paneladmin fichajes query failed: ' . $e->getMessage());
-            return response()->json(['error' => 'No se pudo conectar o la consulta de fichajes superó el tiempo límite.'], 503);
-        }
+        $rows = \Illuminate\Support\Facades\DB::table('fichaje_daily_stats')
+            ->where('day', '>=', $from->format('Y-m-d'))
+            ->where('day', '<=', $to->format('Y-m-d'))
+            ->when($source === 'manual', fn ($q) => $q->where('is_manual', 1))
+            ->when($source === 'employee', fn ($q) => $q->where('is_manual', 0))
+            ->selectRaw("DATE_FORMAT(day, ?) as period, inout_type as type, SUM(count) as count", [$format])
+            ->groupBy('period', 'type')
+            ->orderBy('period')
+            ->get();
 
         $typeMap = [0 => 'entrada', 1 => 'salida', 2 => 'pausa', 3 => 'regreso'];
         $periods = [];
