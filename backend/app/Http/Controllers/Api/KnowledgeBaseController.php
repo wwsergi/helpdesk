@@ -14,8 +14,9 @@ class KnowledgeBaseController extends Controller
         $query = KnowledgeBaseArticle::with('category')
             ->where('tenant_id', $request->user()->tenant_id);
 
-        if ($request->has('category_id')) {
-            $query->where('category_id', $request->category_id);
+        $categoryIds = array_filter((array) $request->input('category_id', []));
+        if (!empty($categoryIds)) {
+            $query->whereIn('category_id', $categoryIds);
         }
 
         if ($request->has('search')) {
@@ -32,22 +33,24 @@ class KnowledgeBaseController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'title' => 'required|string|max:255',
+            'title'       => 'required|string|max:255',
             'category_id' => 'nullable|exists:categories,id',
-            'content' => 'required|string',
-            'is_published' => 'boolean',
+            'content'     => 'required|string',
+            'solution'    => 'nullable|string',
+            'is_published'=> 'boolean',
         ]);
 
         $article = KnowledgeBaseArticle::create([
-            'tenant_id' => $request->user()->tenant_id,
-            'category_id' => $validated['category_id'],
-            'title' => $validated['title'],
-            'slug' => Str::slug($validated['title']),
-            'content' => $validated['content'],
+            'tenant_id'    => $request->user()->tenant_id,
+            'category_id'  => $validated['category_id'] ?? null,
+            'title'        => $validated['title'],
+            'slug'         => Str::slug($validated['title']),
+            'content'      => $validated['content'],
+            'solution'     => $validated['solution'] ?? null,
             'is_published' => $validated['is_published'] ?? true,
         ]);
 
-        return response()->json($article, 201);
+        return response()->json($article->load('category'), 201);
     }
 
     public function show(Request $request, $id)
@@ -64,18 +67,19 @@ class KnowledgeBaseController extends Controller
         $article = KnowledgeBaseArticle::where('tenant_id', $request->user()->tenant_id)->findOrFail($id);
 
         $validated = $request->validate([
-            'title' => 'required|string|max:255',
-            'category_id' => 'nullable|exists:categories,id',
-            'content' => 'required|string',
+            'title'        => 'required|string|max:255',
+            'category_id'  => 'nullable|exists:categories,id',
+            'content'      => 'required|string',
+            'solution'     => 'nullable|string',
             'is_published' => 'boolean',
         ]);
 
-        $updateData = $validated;
-        $updateData['slug'] = Str::slug($validated['title']);
+        $article->update([
+            ...$validated,
+            'slug' => Str::slug($validated['title']),
+        ]);
 
-        $article->update($updateData);
-
-        return response()->json($article);
+        return response()->json($article->load('category'));
     }
 
     public function destroy(Request $request, $id)

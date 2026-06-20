@@ -1,6 +1,13 @@
-version: '3.8'
-
 services:
+    mongodb:
+        image: mongo:7
+        container_name: helpdesk-mongodb
+        restart: unless-stopped
+        volumes:
+            - mongodb_data:/data/db
+        networks:
+            - helpdesk-network
+
     mysql:
         image: mysql:8.0
         container_name: helpdesk-mysql
@@ -49,21 +56,25 @@ services:
             APP_NAME: HelpDesk
             APP_ENV: production
             APP_DEBUG: "false"
-            APP_URL: https://localhost
+            APP_URL: https://soporte.intratime.es
             DB_CONNECTION: mysql
-            DB_HOST: mysql
-            DB_PORT: 3306
-            DB_DATABASE: helpdesk
-            DB_USERNAME: helpdesk_user
-            DB_PASSWORD: helpdesk_password_change_me
+            DB_HOST: ${DB_HOST}
+            DB_PORT: ${DB_PORT:-3306}
+            DB_DATABASE: ${DB_DATABASE:-helpdesk}
+            DB_USERNAME: ${DB_USERNAME}
+            DB_PASSWORD: ${DB_PASSWORD}
             SESSION_DRIVER: file
             CACHE_DRIVER: file
             QUEUE_CONNECTION: sync
+            CLAUDIA_WEBHOOK_SECRET: ${CLAUDIA_WEBHOOK_SECRET}
+            HELPDESK_DEFAULT_TENANT_ID: ${HELPDESK_DEFAULT_TENANT_ID:-1}
         # ports:
         #     - "8000:80"
         depends_on:
             mysql:
                 condition: service_healthy
+        extra_hosts:
+            - "paneladmin-db:192.168.16.11"
         volumes:
             - ./backend:/var/www/html
             # - ./backend/storage:/var/www/html/storage
@@ -85,6 +96,29 @@ services:
         networks:
             - helpdesk-network
 
+    claudia:
+        build:
+            context: ./claud-ia
+            dockerfile: Dockerfile
+        container_name: helpdesk-claudia
+        restart: unless-stopped
+        ports:
+            - "3001:3000"
+        environment:
+            OPENAI_API_KEY: ${OPENAI_API_KEY}
+            AUTH_SECRET: ${AUTH_SECRET}
+            SETTINGS_USERNAME: ${SETTINGS_USERNAME}
+            SETTINGS_PASSWORD: ${SETTINGS_PASSWORD}
+            MONGODB_URI: mongodb://helpdesk-mongodb:27017/claudia
+            CLAUDIA_WEBHOOK_SECRET: ${CLAUDIA_WEBHOOK_SECRET}
+            HELPDESK_API_URL: http://backend/api
+        volumes:
+            - ./claud-ia/data:/app/data
+        depends_on:
+            - mongodb
+        networks:
+            - helpdesk-network
+
     proxy:
         image: nginx:alpine
         container_name: helpdesk-proxy
@@ -94,15 +128,26 @@ services:
             - "443:443"
         volumes:
             - ./proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-            - ./proxy/certs:/etc/nginx/certs:ro
+            - ./proxy/certs:/etc/certs:ro
         depends_on:
             - frontend
             - backend
+            - claudia
         networks:
             - helpdesk-network
 
+    certbot:
+        image: certbot/certbot
+        container_name: helpdesk-certbot
+        volumes:
+            - ./proxy/certbot/conf:/etc/letsencrypt
+            - ./proxy/certbot/www:/var/www/certbot
+        entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
 volumes:
     mysql_data:
+        driver: local
+    mongodb_data:
         driver: local
 
 networks:

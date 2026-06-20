@@ -29,6 +29,7 @@ backend/bootstrap/cache/*
 
 # Secrets & keys
 *.pem
+*.pem.php
 *.key
 .env
 
@@ -36,3 +37,7 @@ backend/bootstrap/cache/*
 *.xlsx
 *.csv
 deploy.sh
+
+# Let's Encrypt / certbot
+proxy/certbot/
+proxy/certs/

@@ -6,6 +6,9 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\TicketController;
 use App\Http\Controllers\Api\AttachmentController;
 
+// External integrations (Claud-IA) — protected by X-Claudia-Key header
+Route::post('/external/tickets', [\App\Http\Controllers\Api\ExternalTicketController::class, 'store']);
+
 // Public routes
 Route::get('/health', function () {
     return response()->json([
@@ -40,14 +43,28 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/attachments/{id}', [AttachmentController::class, 'download']);
     Route::delete('/attachments/{id}', [AttachmentController::class, 'destroy']);
 
+    // Inline image upload (for rich text editor)
+    Route::post('/upload/image', [\App\Http\Controllers\Api\UploadController::class, 'image']);
+
     // Tickets
     Route::get('/tickets', [TicketController::class, 'index']);
+    Route::get('/tickets/export', [TicketController::class, 'export']);
     Route::post('/tickets', [TicketController::class, 'store']);
     Route::get('/tickets/{id}', [TicketController::class, 'show']);
     Route::patch('/tickets/{id}', [TicketController::class, 'update']);
     Route::post('/tickets/{id}/messages', [TicketController::class, 'addMessage']);
+    Route::patch('/tickets/messages/{messageId}', [\App\Http\Controllers\Api\TicketMessageController::class, 'update']);
     Route::post('/tickets/{id}/assign', [TicketController::class, 'assign']);
     Route::delete('/tickets/{id}', [TicketController::class, 'destroy']);
+
+    // Assistance sheet
+    Route::get('/tickets/{id}/assistance-sheet', [\App\Http\Controllers\Api\AssistanceSheetController::class, 'show']);
+
+    // Ticket time entries
+    Route::get('/tickets/{ticketId}/time-entries', [\App\Http\Controllers\Api\TicketTimeEntryController::class, 'index']);
+    Route::post('/tickets/{ticketId}/time-entries', [\App\Http\Controllers\Api\TicketTimeEntryController::class, 'store']);
+    Route::patch('/tickets/{ticketId}/time-entries/{entryId}', [\App\Http\Controllers\Api\TicketTimeEntryController::class, 'update']);
+    Route::delete('/tickets/{ticketId}/time-entries/{entryId}', [\App\Http\Controllers\Api\TicketTimeEntryController::class, 'destroy']);
 
     // Contacts
     Route::get('/contacts', [\App\Http\Controllers\Api\ContactController::class, 'index']);
@@ -58,6 +75,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/contacts/{id}', [\App\Http\Controllers\Api\ContactController::class, 'update']);
     Route::delete('/contacts/{id}', [\App\Http\Controllers\Api\ContactController::class, 'destroy']);
 
+    // Projects (nested under contacts)
+    Route::get('/contacts/{contactId}/projects', [\App\Http\Controllers\Api\ProjectController::class, 'index']);
+    Route::post('/contacts/{contactId}/projects', [\App\Http\Controllers\Api\ProjectController::class, 'store']);
+    Route::patch('/contacts/{contactId}/projects/{id}', [\App\Http\Controllers\Api\ProjectController::class, 'update']);
+    Route::delete('/contacts/{contactId}/projects/{id}', [\App\Http\Controllers\Api\ProjectController::class, 'destroy']);
+
     // Agents list (accessible to all agents for assignment/delegation)
     Route::get('/agents', [\App\Http\Controllers\Api\AgentController::class, 'index']);
     Route::get('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'show']);
@@ -67,6 +90,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/agents', [\App\Http\Controllers\Api\AgentController::class, 'store']);
         Route::patch('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'update']);
         Route::delete('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'destroy']);
+        Route::get('/agents/{id}/logins', [\App\Http\Controllers\Api\AgentController::class, 'logins']);
     });
 
     // Categories
@@ -85,6 +109,19 @@ Route::middleware('auth:sanctum')->group(function () {
     // Ticket Types
     Route::apiResource('/ticket-types', \App\Http\Controllers\Api\TicketTypeController::class);
 
+    // Priorities
+    Route::get('/priorities', [\App\Http\Controllers\Api\PriorityController::class, 'index']);
+    Route::post('/priorities', [\App\Http\Controllers\Api\PriorityController::class, 'store']);
+    Route::patch('/priorities/{id}', [\App\Http\Controllers\Api\PriorityController::class, 'update']);
+    Route::delete('/priorities/{id}', [\App\Http\Controllers\Api\PriorityController::class, 'destroy']);
+
+    // CRM - Deals
+    Route::get('/crm/pipeline', [\App\Http\Controllers\DealController::class, 'pipeline']);
+    Route::apiResource('/deals', \App\Http\Controllers\DealController::class);
+
+    // CRM - Activities
+    Route::apiResource('/activities', \App\Http\Controllers\ActivityController::class);
+
     // Reports (Admin only)
     Route::middleware('admin')->prefix('reports')->group(function () {
         Route::get('/stats', [\App\Http\Controllers\ReportsController::class, 'overallStats']);
@@ -93,6 +130,12 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/distributors', [\App\Http\Controllers\ReportsController::class, 'distributorStats']);
     });
 
+    // Paneladmin Statistics (Admin only)
+    Route::middleware('admin')->get('/statistics/totals', [\App\Http\Controllers\Api\StatisticsController::class, 'totals']);
+    Route::middleware('admin')->get('/statistics/registrations', [\App\Http\Controllers\Api\StatisticsController::class, 'registrations']);
+    Route::middleware('admin')->get('/statistics/fichajes', [\App\Http\Controllers\Api\StatisticsController::class, 'fichajes']);
+
     // Dashboard
     Route::get('/dashboard/stats', [\App\Http\Controllers\Api\DashboardController::class, 'stats']);
+    Route::get('/dashboard/kpis',  [\App\Http\Controllers\Api\DashboardController::class, 'kpis']);
 });

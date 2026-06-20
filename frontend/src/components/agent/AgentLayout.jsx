@@ -7,12 +7,18 @@ export default function AgentLayout({ children }) {
     const { user, logout } = useAuthStore();
     const location = useLocation();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isCrmOpen, setIsCrmOpen] = useState(false);
     const settingsRef = useRef(null);
+    const crmRef = useRef(null);
+    const isCrmUser = user?.role === 'admin' || user?.role === 'comercial';
 
     useEffect(() => {
         function handleClickOutside(event) {
             if (settingsRef.current && !settingsRef.current.contains(event.target)) {
                 setIsSettingsOpen(false);
+            }
+            if (crmRef.current && !crmRef.current.contains(event.target)) {
+                setIsCrmOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
@@ -51,9 +57,33 @@ export default function AgentLayout({ children }) {
                             <nav className="hidden md:flex items-center space-x-6">
                                 <Link to="/agent" className={linkClass('/agent')}>Dashboard</Link>
                                 <Link to="/agent/inbox" className={linkClass('/agent/inbox')}>Inbox</Link>
-                                <Link to="/agent/kb" className={linkClass('/agent/kb')}>Troubleshooting</Link>
+                                <Link to="/agent/kb" className={linkClass('/agent/kb')}>Knowledge Base</Link>
                                 {user?.role === 'admin' && (
                                     <Link to="/agent/reports" className={linkClass('/agent/reports')}>Reports</Link>
+                                )}
+
+                                {/* CRM Dropdown */}
+                                {isCrmUser && (
+                                    <div className="relative" ref={crmRef}>
+                                        <button
+                                            onClick={() => setIsCrmOpen(!isCrmOpen)}
+                                            className={`flex items-center text-sm font-medium transition hover:text-primary-600 focus:outline-none ${isCrmOpen || location.pathname.startsWith('/crm') ? 'text-primary-600' : 'text-gray-700'}`}
+                                        >
+                                            CRM
+                                            <svg className={`ml-1 w-4 h-4 transition-transform ${isCrmOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        {isCrmOpen && (
+                                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 ring-1 ring-black ring-opacity-5">
+                                                <Link onClick={() => setIsCrmOpen(false)} to="/crm/pipeline" className={`block px-4 py-2 text-sm ${isActive('/crm/pipeline') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Pipeline</Link>
+                                                <Link onClick={() => setIsCrmOpen(false)} to="/crm/directory" className={`block px-4 py-2 text-sm ${isActive('/crm/directory') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Directorio</Link>
+                                                {(user?.role === 'admin' || user?.level === 'admin') && (
+                                                    <Link onClick={() => setIsCrmOpen(false)} to="/crm/statistics" className={`block px-4 py-2 text-sm ${isActive('/crm/statistics') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Estadísticas</Link>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
 
                                 {/* Settings Dropdown */}
@@ -73,6 +103,7 @@ export default function AgentLayout({ children }) {
                                             <Link onClick={() => setIsSettingsOpen(false)} to="/agent/contacts" className={`block px-4 py-2 text-sm ${isActive('/agent/contacts') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Customers</Link>
                                             <Link onClick={() => setIsSettingsOpen(false)} to="/agent/categories" className={`block px-4 py-2 text-sm ${isActive('/agent/categories') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Categories</Link>
                                             <Link onClick={() => setIsSettingsOpen(false)} to="/agent/ticket-types" className={`block px-4 py-2 text-sm ${isActive('/agent/ticket-types') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Type Ticket</Link>
+                                            <Link onClick={() => setIsSettingsOpen(false)} to="/agent/priorities" className={`block px-4 py-2 text-sm ${isActive('/agent/priorities') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Prioridades</Link>
                                             {user?.role === 'admin' && (
                                                 <Link onClick={() => setIsSettingsOpen(false)} to="/agent/agents" className={`block px-4 py-2 text-sm ${isActive('/agent/agents') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Agents</Link>
                                             )}

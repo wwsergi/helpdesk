@@ -18,6 +18,12 @@ import Agents from './pages/agent/Agents';
 import Categories from './pages/agent/Categories';
 import KnowledgeBase from './pages/agent/KnowledgeBase';
 import TicketTypes from './pages/agent/TicketTypes';
+import Priorities from './pages/agent/Priorities';
+import AssistanceSheet from './pages/agent/AssistanceSheet';
+import PipelineBoard from './pages/crm/PipelineBoard';
+import ContactProfile from './pages/crm/ContactProfile';
+import CRMDirectory from './pages/crm/CRMDirectory';
+import Statistics from './pages/crm/Statistics';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -117,6 +123,11 @@ function App() {
               <TicketTypes />
             </ProtectedRoute>
           } />
+          <Route path="/agent/priorities" element={
+            <ProtectedRoute allowedRoles={['agent', 'admin']}>
+              <Priorities />
+            </ProtectedRoute>
+          } />
           <Route path="/agent/kb" element={
             <ProtectedRoute allowedRoles={['agent', 'admin']}>
               <KnowledgeBase />
@@ -125,6 +136,33 @@ function App() {
           <Route path="/agent/reports" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <Reports />
+            </ProtectedRoute>
+          } />
+          <Route path="/agent/tickets/:id/assistance-sheet" element={
+            <ProtectedRoute allowedRoles={['agent', 'admin']}>
+              <AssistanceSheet />
+            </ProtectedRoute>
+          } />
+
+          {/* CRM Routes */}
+          <Route path="/crm/pipeline" element={
+            <ProtectedRoute allowedRoles={['admin', 'comercial']}>
+              <PipelineBoard />
+            </ProtectedRoute>
+          } />
+          <Route path="/crm/directory" element={
+            <ProtectedRoute allowedRoles={['agent', 'admin', 'comercial']}>
+              <CRMDirectory />
+            </ProtectedRoute>
+          } />
+          <Route path="/crm/statistics" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <Statistics />
+            </ProtectedRoute>
+          } />
+          <Route path="/crm/contacts/:id" element={
+            <ProtectedRoute allowedRoles={['agent', 'admin', 'comercial']}>
+              <ContactProfile />
             </ProtectedRoute>
           } />
 

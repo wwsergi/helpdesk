@@ -17,21 +17,20 @@ class TicketAttachment extends Model
         'size',
     ];
 
-    protected $appends = ['url'];
+    protected $appends = ['url', 'preview_url'];
 
-    /**
-     * Get the message this attachment belongs to
-     */
     public function message()
     {
         return $this->belongsTo(TicketMessage::class, 'ticket_message_id');
     }
 
-    /**
-     * Get the full URL for the attachment
-     */
     public function getUrlAttribute()
     {
-        return url('/api/attachments/' . $this->id);
+        return '/api/attachments/' . $this->id;
+    }
+
+    public function getPreviewUrlAttribute()
+    {
+        return '/storage/' . $this->path;
     }
 }

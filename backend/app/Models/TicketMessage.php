@@ -16,6 +16,7 @@ class TicketMessage extends Model
         'contact_id',
         'body',
         'is_internal',
+        'is_solution',
         'channel_source',
         'email_message_id',
         'email_headers',
@@ -24,7 +25,8 @@ class TicketMessage extends Model
     protected $appends = ['author'];
 
     protected $casts = [
-        'is_internal' => 'boolean',
+        'is_internal'  => 'boolean',
+        'is_solution'  => 'boolean',
     ];
 
     public function getAuthorAttribute()
