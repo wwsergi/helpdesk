@@ -41,3 +41,6 @@ deploy.sh
 # Let's Encrypt / certbot
 proxy/certbot/
 proxy/certs/
+
+# Override local de Docker Compose (ver docker-compose.override.yml.example)
+docker-compose.override.yml
