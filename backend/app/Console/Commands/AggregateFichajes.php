@@ -13,7 +13,7 @@ class AggregateFichajes extends Command
         {--days=45 : Días hacia atrás a reagregar (modo incremental)}
         {--full : Reagregar desde el primer registro existente (backfill completo)}';
 
-    protected $description = 'Pre-agrega los fichajes de Intratime (login_logout) en la tabla local fichaje_daily_stats, troceando día a día para no saturar la BD origen';
+    protected $description = 'Pre-agrega los fichajes de Intratime (login_logout) en las tablas locales fichaje_daily_stats (global) y fichaje_company_daily_stats (por empresa), troceando día a día para no saturar la BD origen';
 
     public function handle(): int
     {
@@ -44,6 +44,7 @@ class AggregateFichajes extends Command
         $now = Carbon::now();
         $totalDays = 0;
         $totalRows = 0;
+        $companyRows = 0;
         $failed = 0;
 
         for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
@@ -83,13 +84,70 @@ class AggregateFichajes extends Command
                 }
             });
 
+            // ── Desglose por empresa ────────────────────────────────────────
+            // Segunda consulta del mismo día. Se mantiene separada de la global
+            // para no alterar el comportamiento de fichaje_daily_stats, que ya
+            // está en producción. El join va contra users.USER_ID (PK) y
+            // companies.COMPANY_UNIQUE_ID (único): ~1s por día.
+            try {
+                $byCompany = $conn->table('login_logout as ll')
+                    ->join('users as u', 'u.USER_ID', '=', 'll.INOUT_USER_ID')
+                    ->leftJoin('companies as c', 'c.COMPANY_UNIQUE_ID', '=', 'u.USER_COMPANY')
+                    ->whereNull('ll.INOUT_DELETED_AT')
+                    ->whereIn('ll.INOUT_TYPE', [0, 1, 2, 3])
+                    ->where('ll.INOUT_DATE', '>=', $dayStart)
+                    ->where('ll.INOUT_DATE', '<', $dayEnd)
+                    ->whereNotNull('u.USER_COMPANY')
+                    ->where('u.USER_COMPANY', '<>', '')
+                    ->selectRaw(
+                        'u.USER_COMPANY as company,'
+                        . ' SUM(ll.INOUT_TYPE = 0) as clock_in,'
+                        . ' SUM(ll.INOUT_TYPE = 1) as clock_out,'
+                        . ' SUM(ll.INOUT_TYPE = 2) as pause,'
+                        . ' SUM(ll.INOUT_TYPE = 3) as return_count,'
+                        . ' SUM(ll.INOUT_SOURCE = 3) as manual_count,'
+                        . ' COUNT(DISTINCT ll.INOUT_USER_ID) as active_users,'
+                        . ' MAX(c.COMPANY_CURRENT_USERS) as headcount'
+                    )
+                    ->groupBy('u.USER_COMPANY')
+                    ->get();
+            } catch (\Throwable $e) {
+                $failed++;
+                $this->warn("  {$dayStr} (empresas) saltado: " . $e->getMessage());
+                Log::warning("fichajes:aggregate {$dayStr} desglose por empresa falló: " . $e->getMessage());
+                $byCompany = collect();
+            }
+
+            DB::transaction(function () use ($byCompany, $dayStr, $now, &$companyRows) {
+                DB::table('fichaje_company_daily_stats')->where('day', $dayStr)->delete();
+                foreach ($byCompany->chunk(500) as $chunk) {
+                    $insert = $chunk->map(fn ($r) => [
+                        'day'                 => $dayStr,
+                        'company_external_id' => (string) $r->company,
+                        'clock_in'            => (int) $r->clock_in,
+                        'clock_out'           => (int) $r->clock_out,
+                        'pause'               => (int) $r->pause,
+                        'return_count'        => (int) $r->return_count,
+                        'manual_count'        => (int) $r->manual_count,
+                        'active_users'        => (int) $r->active_users,
+                        'headcount'           => $r->headcount !== null ? (int) $r->headcount : null,
+                        'updated_at'          => $now,
+                    ])->values()->all();
+                    DB::table('fichaje_company_daily_stats')->insert($insert);
+                    $companyRows += count($insert);
+                }
+            });
+
             $totalDays++;
             if ($totalDays % 30 === 0) {
                 $this->info("  {$totalDays} días procesados (último: {$dayStr})…");
             }
         }
 
-        $msg = sprintf('fichajes:aggregate OK — %d días, %d filas%s.', $totalDays, $totalRows, $failed ? ", {$failed} días con error" : '');
+        $msg = sprintf(
+            'fichajes:aggregate OK — %d días, %d filas globales, %d filas por empresa%s.',
+            $totalDays, $totalRows, $companyRows, $failed ? ", {$failed} días con error" : ''
+        );
         $this->info($msg);
         Log::info($msg);
 
