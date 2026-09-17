@@ -87,6 +87,22 @@ class AgentController extends Controller
         return response()->json($agent);
     }
 
+    /**
+     * Login history (success + failed attempts) for a team member. Admin only.
+     */
+    public function logins(Request $request, $id)
+    {
+        $agent = User::where('tenant_id', $request->user()->tenant_id)
+            ->whereIn('role', ['agent', 'admin'])
+            ->findOrFail($id);
+
+        $logs = \App\Models\LoginLog::where('user_id', $agent->id)
+            ->orderBy('created_at', 'desc')
+            ->paginate(25);
+
+        return response()->json($logs);
+    }
+
     public function destroy(Request $request, $id)
     {
         $agent = User::where('tenant_id', $request->user()->tenant_id)

@@ -3,37 +3,155 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Contact;
 use App\Models\Ticket;
 use App\Models\TicketMessage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 class TicketController extends Controller
 {
     public function index(Request $request)
     {
-        $assignedToMe = $request->has('assigned_to_me') && $request->assigned_to_me;
+        $query = $this->buildFilteredQuery($request);
 
-        $query = Ticket::with(['contact', 'user', 'queue', 'messages.user', 'messages.contact'])
-            ->withCount('children')
+        if ($query === null) {
+            return response()->json(['data' => [], 'total' => 0]);
+        }
+
+        $query->with(['contact', 'user', 'creator', 'queue', 'messages.user', 'messages.contact', 'children.user', 'children.creator'])
+            ->withCount('children');
+
+        $this->applySort($query, $request);
+
+        // Aggregate totals across ALL filtered tickets (not just current page)
+        // Used by the inbox "show total hours" toggle so the total stays
+        // consistent while paginating.
+        $totalMinutesAll = (int) \DB::table('ticket_time_entries')
+            ->whereIn('ticket_id', (clone $query)->reorder()->select('tickets.id'))
+            ->sum('duration_minutes');
+
+        $ticketsWithTimeCount = (clone $query)->whereHas('timeEntries')->count();
+
+        $tickets = $query->paginate(20);
+
+        $payload = $tickets->toArray();
+        $payload['total_minutes_all'] = $totalMinutesAll;
+        $payload['tickets_with_time_count'] = $ticketsWithTimeCount;
+
+        return response()->json($payload);
+    }
+
+    /**
+     * Export the currently filtered ticket list to an Excel (.xlsx) file.
+     * Honours the same filters/sort as the inbox listing (no pagination).
+     */
+    public function export(Request $request)
+    {
+        $query = $this->buildFilteredQuery($request);
+
+        if ($query === null) {
+            $query = Ticket::query()->whereRaw('1 = 0');
+        }
+
+        $query->with('contact');
+        $this->applySort($query, $request);
+
+        $tickets = $query->get();
+
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setTitle('Asistencias');
+
+        $headers = ['Nº Asistencia', 'Cliente', 'Descripción', 'Fecha', 'Tiempo'];
+        $sheet->fromArray($headers, null, 'A1');
+        $sheet->getStyle('A1:E1')->getFont()->setBold(true);
+        $sheet->getStyle('A1:E1')->getAlignment()->setVertical(Alignment::VERTICAL_CENTER);
+
+        $row = 2;
+        foreach ($tickets as $ticket) {
+            $minutes = (int) $ticket->time_entries_sum_duration_minutes;
+            $sheet->setCellValueExplicit("A{$row}", $ticket->uuid, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue("B{$row}", $ticket->contact->name ?? '');
+            $sheet->setCellValue("C{$row}", $ticket->subject);
+            $sheet->setCellValue("D{$row}", optional($ticket->created_at)->format('d/m/Y H:i'));
+            $sheet->setCellValue("E{$row}", $this->formatMinutes($minutes));
+            $row++;
+        }
+
+        foreach (range('A', 'E') as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        $writer = new Xlsx($spreadsheet);
+        $filename = 'asistencias-' . now()->format('Ymd-His') . '.xlsx';
+
+        return response()->streamDownload(function () use ($writer) {
+            $writer->save('php://output');
+        }, $filename, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    /**
+     * Build the ticket query with all inbox filters applied (no ordering or
+     * pagination). Returns null when the request resolves to "no results"
+     * (e.g. a customer with no matching contact).
+     */
+    private function buildFilteredQuery(Request $request)
+    {
+        $assignedToMe = $request->has('assigned_to_me') && $request->assigned_to_me;
+        $filterByContact = $request->filled('contact_id') && in_array($request->user()->role, ['agent', 'admin', 'comercial']);
+
+        $query = Ticket::query()
+            ->withSum('timeEntries', 'duration_minutes')
             ->where('tenant_id', $request->user()->tenant_id);
 
-        // "My Tickets" shows all tickets assigned to me, including subtickets delegated to me.
-        // General inbox only shows top-level tickets.
-        if ($assignedToMe) {
+        if ($filterByContact) {
+            // CRM profile view: show all tickets for this contact (no parent restriction)
+            $query->where('contact_id', $request->contact_id);
+        } elseif ($assignedToMe) {
+            // "My Tickets" shows all tickets assigned to me, including subtickets delegated to me.
             $query->where('user_id', $request->user()->id);
         } else {
+            // General inbox only shows top-level tickets.
             $query->whereNull('parent_ticket_id');
         }
 
-        // Filter by status
-        if ($request->has('status')) {
-            $query->where('status', $request->status);
+        // Filter by status (comma-separated values; DELETED shows soft-deleted tickets)
+        if ($request->has('status') && $request->status !== '') {
+            $statuses = array_filter(explode(',', $request->status));
+            $hasDeleted = in_array('DELETED', $statuses);
+            $otherStatuses = array_values(array_filter($statuses, fn($s) => $s !== 'DELETED'));
+
+            if ($hasDeleted && empty($otherStatuses)) {
+                $query->withTrashed()->whereNotNull('deleted_at');
+            } elseif ($hasDeleted) {
+                $query->withTrashed()->where(function ($q) use ($otherStatuses) {
+                    $q->whereNotNull('deleted_at')->orWhereIn('status', $otherStatuses);
+                });
+            } else {
+                $query->whereIn('status', $otherStatuses);
+            }
         }
 
-        // Filter by priority
-        if ($request->has('priority')) {
-            $query->where('priority', $request->priority);
+        // Filter by priority (comma-separated)
+        if ($request->has('priority') && $request->priority !== '') {
+            $priorities = array_filter(explode(',', $request->priority));
+            if (!empty($priorities)) {
+                $query->whereIn('priority', $priorities);
+            }
+        }
+
+        // Filter by category (comma-separated IDs)
+        if ($request->has('category_id') && $request->category_id !== '') {
+            $categoryIds = array_filter(explode(',', $request->category_id));
+            if (!empty($categoryIds)) {
+                $query->whereIn('category_id', $categoryIds);
+            }
         }
 
         // Filter by specific assigned user
@@ -64,6 +182,7 @@ class TicketController extends Controller
             $searchTerm = $request->search;
             $query->where(function ($q) use ($searchTerm) {
                 $q->where('subject', 'like', '%' . $searchTerm . '%')
+                    ->orWhere('jira_issue_link', 'like', '%' . $searchTerm . '%')
                     ->orWhereHas('messages', function ($messageQuery) use ($searchTerm) {
                         $messageQuery->where('body', 'like', '%' . $searchTerm . '%');
                     })
@@ -74,22 +193,64 @@ class TicketController extends Controller
             });
         }
 
+        // Filter by client (inbox use — keeps parent ticket restriction)
+        if ($request->filled('client_id') && in_array($request->user()->role, ['agent', 'admin', 'comercial'])) {
+            $query->where('contact_id', $request->client_id);
+        }
+
         // For customers, only show their own tickets and NOT child tickets (internal delegation)
         if ($request->user()->role === 'customer') {
-            $contact = \App\Models\Contact::where('email', $request->user()->email)
+            $contact = Contact::where('email', $request->user()->email)
                 ->where('tenant_id', $request->user()->tenant_id)
                 ->first();
 
             if (!$contact) {
-                return response()->json(['data' => [], 'total' => 0]);
+                return null;
             }
 
             $query->where('contact_id', $contact->id);
         }
 
-        $tickets = $query->orderBy('created_at', 'desc')->paginate(20);
+        return $query;
+    }
 
-        return response()->json($tickets);
+    /**
+     * Apply ordering to the ticket query based on the `sort` request param.
+     * Supports client name (asc/desc) and creation date (asc/desc).
+     */
+    private function applySort($query, Request $request)
+    {
+        $sort = $request->get('sort', 'created_desc');
+
+        switch ($sort) {
+            case 'client_asc':
+            case 'client_desc':
+                $dir = $sort === 'client_asc' ? 'asc' : 'desc';
+                // Order by the related contact name via a correlated subquery so
+                // we don't disturb the withSum/withCount aggregate selects.
+                $query->orderBy(
+                    Contact::select('name')->whereColumn('contacts.id', 'tickets.contact_id'),
+                    $dir
+                )->orderBy('tickets.created_at', 'desc');
+                break;
+            case 'created_asc':
+                $query->orderBy('created_at', 'asc');
+                break;
+            case 'created_desc':
+            default:
+                $query->orderBy('created_at', 'desc');
+                break;
+        }
+    }
+
+    private function formatMinutes(?int $minutes): string
+    {
+        if (!$minutes) {
+            return '0min';
+        }
+        $h = intdiv($minutes, 60);
+        $m = $minutes % 60;
+        return $h > 0 ? "{$h}h {$m}min" : "{$m}min";
     }
 
     public function store(Request $request)
@@ -109,6 +270,8 @@ class TicketController extends Controller
             'attachments.*.size' => 'required|integer',
             'user_id' => 'nullable|exists:users,id',
             'comment' => 'nullable|string',
+            'contact_name' => 'nullable|string|max:255',
+            'contact_phone' => 'nullable|string|max:50',
         ]);
 
         // Subticket Logic
@@ -156,6 +319,8 @@ class TicketController extends Controller
             'uuid' => 'TKT-' . strtoupper(Str::random(6)),
             'tenant_id' => $request->user()->tenant_id,
             'contact_id' => $contactId,
+            'contact_name' => $validated['contact_name'] ?? null,
+            'contact_phone' => $validated['contact_phone'] ?? null,
             'subject' => $subject,
             'description' => $validated['description'] ?? null,
             'status' => $status,
@@ -164,6 +329,7 @@ class TicketController extends Controller
             'category_id' => $validated['category_id'] ?? null,
             'parent_ticket_id' => $validated['parent_ticket_id'] ?? null,
             'user_id' => $validated['user_id'] ?? null,
+            'created_by_id' => $request->user()->id,
             'channel' => 'web',
         ]);
 
@@ -213,13 +379,13 @@ class TicketController extends Controller
             }
         }
 
-        return response()->json($ticket->load(['contact', 'user', 'queue', 'messages.user', 'messages.contact', 'messages.attachments']), 201);
+        return response()->json($ticket->load(['contact', 'user', 'creator', 'queue', 'messages.user', 'messages.contact', 'messages.attachments']), 201);
     }
 
     public function show(Request $request, $id)
     {
         $ticket = Ticket::with([
-            'contact', 'user', 'queue',
+            'contact', 'user', 'creator', 'queue',
             'messages.user', 'messages.contact', 'messages.attachments',
             'children.user',
             'parent.messages.user', 'parent.messages.contact', 'parent.messages.attachments',
@@ -252,11 +418,15 @@ class TicketController extends Controller
 
         $validated = $request->validate([
             'status' => 'nullable|in:NEW,OPEN,IN_PROGRESS,PENDING_CUSTOMER,RESOLVED,CLOSED',
-            'priority' => 'nullable|in:P1,P2,P3,P4',
+            'priority' => 'nullable|string|max:50',
             'user_id' => 'nullable|exists:users,id',
             'queue_id' => 'nullable|exists:queues,id',
             'category_id' => 'nullable|exists:categories,id',
-            'jira_issue_link' => 'nullable|url',
+            'ticket_type_id' => 'nullable|exists:ticket_types,id',
+            'jira_issue_link' => 'nullable|string|max:500',
+            'subject' => 'nullable|string|max:255',
+            'contact_id' => 'nullable|exists:contacts,id',
+            'delegation_comment' => 'nullable|string|max:1000',
         ]);
 
         // Only agents can update tickets, UNLESS customer is marking as RESOLVED
@@ -269,19 +439,20 @@ class TicketController extends Controller
             }
         }
 
+        $previousUserId = $ticket->user_id;
+        $delegationComment = $validated['delegation_comment'] ?? null;
+        unset($validated['delegation_comment']);
+
         if (isset($validated['status'])) {
             if ($validated['status'] === 'RESOLVED' && $ticket->status !== 'RESOLVED') {
                 $validated['resolved_at'] = now();
 
-                // Rule A: Parent Resolved => All Subtickets Resolved
                 $ticket->children()->where('status', '!=', 'RESOLVED')->update([
                     'status' => 'RESOLVED',
                     'resolved_at' => now(),
-                    // Add logic to log this if needed, but direct update is fastest
                 ]);
 
             } elseif (in_array($validated['status'], ['NEW', 'IN_PROGRESS', 'PENDING_CUSTOMER'])) {
-                // If reopening or moving to active state, clear resolved timestamp
                 $validated['resolved_at'] = null;
                 $validated['closed_at'] = null;
             }
@@ -294,7 +465,37 @@ class TicketController extends Controller
             $ticket->update(['status' => 'IN_PROGRESS']);
         }
 
-        return response()->json($ticket->load(['contact', 'user', 'queue', 'children'])); // Reload children to reflect changes if any
+        // Record delegation note when user_id changes
+        if (
+            isset($validated['user_id']) &&
+            $validated['user_id'] != $previousUserId &&
+            $request->user()->role !== 'customer'
+        ) {
+            $newAgent = \App\Models\User::find($validated['user_id']);
+            $prevAgent = $previousUserId ? \App\Models\User::find($previousUserId) : null;
+
+            $prevLabel = $prevAgent
+                ? $prevAgent->name . ($prevAgent->level ? " (L{$prevAgent->level})" : '')
+                : 'Sin asignar';
+            $newLabel = $newAgent
+                ? $newAgent->name . ($newAgent->level ? " (L{$newAgent->level})" : '')
+                : 'Sin asignar';
+
+            $noteBody = "🔀 **Delegado** de {$prevLabel} a {$newLabel}";
+            if ($delegationComment) {
+                $noteBody .= " — {$delegationComment}";
+            }
+
+            \App\Models\TicketMessage::create([
+                'ticket_id' => $ticket->id,
+                'user_id' => $request->user()->id,
+                'body' => $noteBody,
+                'is_internal' => true,
+                'is_solution' => false,
+            ]);
+        }
+
+        return response()->json($ticket->load(['contact', 'user', 'queue', 'messages', 'children']));
     }
 
     public function addMessage(Request $request, $id)
@@ -324,6 +525,7 @@ class TicketController extends Controller
         $validated = $request->validate([
             'body' => 'required|string',
             'is_internal' => 'nullable|boolean',
+            'is_solution' => 'nullable|boolean',
             'attachments' => 'nullable|array',
             'attachments.*.name' => 'required|string',
             'attachments.*.path' => 'required|string',
@@ -341,11 +543,22 @@ class TicketController extends Controller
             $isInternal = $validated['is_internal'] ?? false;
         }
 
+        $isSolution = ($validated['is_solution'] ?? false) && $request->user()->role !== 'customer';
+
+        // Only one solution per ticket — clear any previous
+        if ($isSolution) {
+            TicketMessage::where('ticket_id', $targetTicket->id)->where('is_solution', true)->update(['is_solution' => false]);
+            if (!in_array($targetTicket->status, ['RESOLVED', 'CLOSED'])) {
+                $targetTicket->update(['status' => 'RESOLVED']);
+            }
+        }
+
         $message = TicketMessage::create([
             'ticket_id' => $targetTicket->id,
             'contact_id' => $request->user()->role === 'customer' ? $contactId : null,
             'user_id' => $request->user()->role !== 'customer' ? $request->user()->id : null,
             'is_internal' => $isInternal,
+            'is_solution' => $isSolution,
             'body' => $validated['body'],
             'channel_source' => 'web',
         ]);
@@ -371,14 +584,31 @@ class TicketController extends Controller
             $targetTicket->update(['first_response_at' => now()]);
         }
 
-        // Status Automation (on the parent/target ticket)
+        // Status Automation: only auto-change when the customer replies
         if ($request->user()->role === 'customer') {
             if ($targetTicket->status !== 'IN_PROGRESS' && $targetTicket->status !== 'NEW') {
                 $targetTicket->update(['status' => 'IN_PROGRESS']);
             }
-        } else {
-            if (!$isInternal) {
-                $targetTicket->update(['status' => 'PENDING_CUSTOMER']);
+        }
+
+        // Auto-create Knowledge Base article when solution is marked
+        if ($isSolution) {
+            $alreadyExists = \App\Models\KnowledgeBaseArticle::where('ticket_id', $targetTicket->id)->exists();
+            if (!$alreadyExists) {
+                \App\Models\KnowledgeBaseArticle::create([
+                    'tenant_id'    => $targetTicket->tenant_id,
+                    'ticket_id'    => $targetTicket->id,
+                    'category_id'  => $targetTicket->category_id,
+                    'title'        => $targetTicket->subject,
+                    'slug'         => \Illuminate\Support\Str::slug($targetTicket->subject . '-' . $targetTicket->id),
+                    'content'      => $targetTicket->description ?? '',
+                    'solution'     => $validated['body'],
+                    'is_published' => true,
+                ]);
+            } else {
+                // Update existing article's solution
+                \App\Models\KnowledgeBaseArticle::where('ticket_id', $targetTicket->id)
+                    ->update(['solution' => $validated['body']]);
             }
         }
 

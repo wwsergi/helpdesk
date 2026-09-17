@@ -7,7 +7,6 @@ use App\Models\Contact;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Password;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -22,7 +21,8 @@ class ContactController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
+                    ->orWhere('email', 'like', "%{$search}%")
+                    ->orWhere('cif', 'like', "%{$search}%");
             });
         }
 
@@ -34,6 +34,47 @@ class ContactController extends Controller
             $isActive = filter_var($request->active, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
             if ($isActive !== null) {
                 $query->where('active', $isActive);
+            }
+        }
+
+        if ($request->has('is_lead') && $request->is_lead !== null && $request->is_lead !== '') {
+            $isLead = filter_var($request->is_lead, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($isLead !== null) {
+                $query->where('is_lead', $isLead);
+            }
+        }
+
+        if ($request->has('contract_category')) {
+            $rawCats = $request->input('contract_category');
+            if ($rawCats !== null && $rawCats !== '') {
+                $cats = array_values(array_filter(
+                    is_array($rawCats) ? $rawCats : [$rawCats],
+                    fn ($v) => $v !== null && $v !== ''
+                ));
+
+                if (!empty($cats)) {
+                    $hasLead   = in_array('lead', $cats);
+                    $hasSinCat = in_array('sin_categoria', $cats);
+                    $others    = array_values(array_filter($cats, fn ($c) => $c !== 'lead' && $c !== 'sin_categoria'));
+
+                    $query->where(function ($q) use ($hasLead, $hasSinCat, $others) {
+                        $first = true;
+                        if ($hasLead) {
+                            $q->where('is_lead', true);
+                            $first = false;
+                        }
+                        if (!empty($others)) {
+                            $first
+                                ? $q->whereIn('contract_category', $others)
+                                : $q->orWhereIn('contract_category', $others);
+                            $first = false;
+                        }
+                        if ($hasSinCat) {
+                            $clause = fn ($q2) => $q2->whereNull('contract_category')->where('is_lead', false);
+                            $first ? $q->where($clause) : $q->orWhere($clause);
+                        }
+                    });
+                }
             }
         }
 
@@ -49,8 +90,28 @@ class ContactController extends Controller
             }
         }
 
+        if ($request->filled('sync_source')) {
+            if ($request->sync_source === 'manual') {
+                $query->whereNull('sync_source');
+            } else {
+                $query->where('sync_source', $request->sync_source);
+            }
+        }
+
+        if ($request->filled('date_from')) {
+            $query->where('registration_date', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->where('registration_date', '<=', $request->date_to);
+        }
+
+        if ($request->boolean('all')) {
+            return response()->json($query->orderBy('name')->get(['id', 'name']));
+        }
+
         $perPage = $request->input('per_page', 50);
-        return response()->json($query->orderBy('name')->paginate($perPage));
+        return response()->json($query->orderBy('registration_date', 'desc')->orderBy('name')->paginate($perPage));
     }
 
     public function store(Request $request)
@@ -59,6 +120,7 @@ class ContactController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:contacts,email,NULL,id,tenant_id,' . $request->user()->tenant_id . '|unique:users,email',
             'phone' => 'nullable|string|max:50',
+            'contact_person' => 'nullable|string|max:255',
             'external_id' => 'nullable|string|max:255',
             'password' => ['nullable', 'confirmed', Password::defaults()],
             'cif' => 'nullable|string|max:255',
@@ -67,11 +129,19 @@ class ContactController extends Controller
             'billing_mode' => 'nullable|string|max:255',
             'rate' => 'nullable|string|max:255',
             'registration_date' => 'nullable|date',
+            'distributor_id' => 'nullable|integer',
+            'has_contract' => 'nullable|boolean',
+            'contract_type' => 'nullable|in:none,hours,unlimited',
+            'contract_hours_month' => 'nullable|integer|min:1',
+            'contract_start_date' => 'nullable|date',
+            'contract_end_date' => 'nullable|date|after_or_equal:contract_start_date',
+            'contract_notes' => 'nullable|string|max:2000',
         ]);
 
         $contact = Contact::create([
             'tenant_id' => $request->user()->tenant_id,
             'name' => $validated['name'],
+            'contact_person' => $validated['contact_person'] ?? null,
             'email' => $validated['email'],
             'phone' => $validated['phone'] ?? null,
             'external_id' => $validated['external_id'] ?? null,
@@ -81,6 +151,13 @@ class ContactController extends Controller
             'billing_mode' => $validated['billing_mode'] ?? null,
             'rate' => $validated['rate'] ?? null,
             'registration_date' => $validated['registration_date'] ?? null,
+            'distributor_id' => $validated['distributor_id'] ?? null,
+            'has_contract' => $validated['has_contract'] ?? false,
+            'contract_type' => $validated['contract_type'] ?? 'none',
+            'contract_hours_month' => $validated['contract_hours_month'] ?? null,
+            'contract_start_date' => $validated['contract_start_date'] ?? null,
+            'contract_end_date' => $validated['contract_end_date'] ?? null,
+            'contract_notes' => $validated['contract_notes'] ?? null,
         ]);
 
         // Create associated User for login ONLY if password provided
@@ -112,6 +189,7 @@ class ContactController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:contacts,email,' . $id . ',id,tenant_id,' . $request->user()->tenant_id . '|unique:users,email,' . $oldEmail . ',email',
             'phone' => 'nullable|string|max:50',
+            'contact_person' => 'nullable|string|max:255',
             'external_id' => 'nullable|string|max:255',
             'password' => ['nullable', 'confirmed', Password::defaults()],
             'cif' => 'nullable|string|max:255',
@@ -120,10 +198,18 @@ class ContactController extends Controller
             'billing_mode' => 'nullable|string|max:255',
             'rate' => 'nullable|string|max:255',
             'registration_date' => 'nullable|date',
+            'distributor_id' => 'nullable|integer',
+            'has_contract' => 'nullable|boolean',
+            'contract_type' => 'nullable|in:none,hours,unlimited',
+            'contract_hours_month' => 'nullable|integer|min:1',
+            'contract_start_date' => 'nullable|date',
+            'contract_end_date' => 'nullable|date|after_or_equal:contract_start_date',
+            'contract_notes' => 'nullable|string|max:2000',
         ]);
 
         $contact->update([
             'name' => $validated['name'],
+            'contact_person' => $validated['contact_person'] ?? null,
             'email' => $validated['email'],
             'phone' => $validated['phone'] ?? null,
             'external_id' => $validated['external_id'] ?? null,
@@ -133,6 +219,13 @@ class ContactController extends Controller
             'billing_mode' => $validated['billing_mode'] ?? null,
             'rate' => $validated['rate'] ?? null,
             'registration_date' => $validated['registration_date'] ?? null,
+            'distributor_id' => $validated['distributor_id'] ?? null,
+            'has_contract' => $validated['has_contract'] ?? $contact->has_contract,
+            'contract_type' => $validated['contract_type'] ?? $contact->contract_type,
+            'contract_hours_month' => $validated['contract_hours_month'] ?? null,
+            'contract_start_date' => $validated['contract_start_date'] ?? null,
+            'contract_end_date' => $validated['contract_end_date'] ?? null,
+            'contract_notes' => $validated['contract_notes'] ?? null,
         ]);
 
         // Update associated User logic
@@ -254,6 +347,7 @@ class ContactController extends Controller
                 } else {
                     Contact::create(array_merge($data, [
                         'tenant_id' => $request->user()->tenant_id,
+                        'sync_source' => 'import',
                     ]));
                     $imported++;
                 }
@@ -275,103 +369,13 @@ class ContactController extends Controller
 
     public function sync(Request $request)
     {
-        $adminUrl = config('services.intratime.admin_url');
-        $adminToken = config('services.intratime.admin_token');
+        $tenantId = (int) $request->user()->tenant_id;
+        $artisan = base_path('artisan');
 
-        if (!$adminUrl || !$adminToken) {
-            return response()->json(['message' => 'Intratime API credentials are not configured.'], 500);
-        }
-
-        $adminUrl = rtrim($adminUrl, '/');
-
-        $page = 1;
-        $imported = 0;
-        $updated = 0;
-        $skipped = 0;
-
-        try {
-            do {
-                $response = Http::withToken($adminToken)
-                    ->acceptJson()
-                    ->get("{$adminUrl}/api/companies", [
-                        'page' => $page,
-                        'per_page' => 200,
-                        //'filter[isDemo]' => 'false',
-                        'filter[payment_method]' => '1,2,3,4'
-                    ]);
-
-                if (!$response->successful()) {
-                    Log::error('Intratime Sync Error: ' . $response->body());
-                    return response()->json(['message' => 'Failed to fetch companies from Intratime API'], 500);
-                }
-
-                $data = $response->json();
-
-                // Handle different API response structures (paginated vs array list)
-                $companies = isset($data['data']) ? $data['data'] : (isset($data['items']) ? $data['items'] : $data);
-
-                if (empty($companies) || !is_array($companies)) {
-                    break;
-                }
-
-                foreach ($companies as $company) {
-                    $tenantId = $request->user()->tenant_id;
-                    $externalId = (string) ($company['unique_id'] ?? $company['id'] ?? '');
-
-                    // Skip companies without IDs
-                    if (!$externalId) {
-                        $skipped++;
-                        continue;
-                    }
-
-                    $contactData = [
-                        'tenant_id' => $tenantId,
-                        'name' => $company['name'] ?? 'Unknown Company',
-                        'email' => $company['email'] ?? null,
-                        'cif' => $company['cif'] ?? null,
-                        'phone' => $company['phone'] ?? null,
-                        'subscription_plan' => $company['plan'] ?? null,
-                        'max_users' => $company['max_users'] ?? null,
-                        'active' => $company['active'] ?? true,
-                        'billing_mode' => $company['cycle'] ?? null,
-                        'distributor_id' => $company['distributor_id'] ?? null,
-                    ];
-
-                    $existing = Contact::where('tenant_id', $tenantId)
-                        ->where('external_id', $externalId)
-                        ->first();
-
-                    if ($existing) {
-                        $existing->update($contactData);
-                        $updated++;
-                    } else {
-                        $contactData['external_id'] = $externalId;
-                        Contact::create($contactData);
-                        $imported++;
-                    }
-                }
-
-                $lastPage = 1;
-                if (isset($data['meta']['last_page'])) {
-                    $lastPage = $data['meta']['last_page'];
-                } elseif (isset($data['last_page'])) {
-                    $lastPage = $data['last_page'];
-                }
-
-                $page++;
-
-            } while ($page <= $lastPage);
-
-        } catch (\Exception $e) {
-            Log::error('Intratime Sync Exception: ' . $e->getMessage());
-            return response()->json(['message' => 'An error occurred during sync.'], 500);
-        }
+        exec("php {$artisan} paneladmin:sync-clients --tenant={$tenantId} > /dev/null 2>&1 &");
 
         return response()->json([
-            'message' => 'Sync completed successfully.',
-            'imported' => $imported,
-            'updated' => $updated,
-            'skipped' => $skipped,
-        ]);
+            'message' => 'Sync iniciado. Los contactos se actualizarán en aproximadamente 1 minuto.',
+        ], 202);
     }
 }
