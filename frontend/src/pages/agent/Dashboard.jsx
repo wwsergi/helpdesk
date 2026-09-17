@@ -337,7 +337,7 @@ export default function AgentDashboard() {
                             { to: '/agent/kb',         label: 'KB',            sub: 'Base de conocimiento' },
                             { to: '/agent/categories', label: 'Categorías',    sub: 'Árbol 3 niveles' },
                             { to: '/agent/reports',    label: 'Informes',      sub: 'Ver analíticas' },
-                            { to: '/crm/statistics',   label: 'Estadísticas',  sub: 'Panel CRM' },
+                            { to: '/analytics/statistics', label: 'Estadísticas',  sub: 'Analytics' },
                         ].map(({ to, label, sub }) => (
                             <Link key={to} to={to}
                                 className="flex flex-col items-center p-3 border border-gray-200 rounded-lg hover:border-primary-400 hover:bg-primary-50 transition text-center group">

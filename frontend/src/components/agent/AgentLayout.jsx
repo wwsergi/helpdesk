@@ -8,9 +8,12 @@ export default function AgentLayout({ children }) {
     const location = useLocation();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isCrmOpen, setIsCrmOpen] = useState(false);
+    const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
     const settingsRef = useRef(null);
     const crmRef = useRef(null);
+    const analyticsRef = useRef(null);
     const isCrmUser = user?.role === 'admin' || user?.role === 'comercial';
+    const isAdmin = user?.role === 'admin';
 
     useEffect(() => {
         function handleClickOutside(event) {
@@ -19,6 +22,9 @@ export default function AgentLayout({ children }) {
             }
             if (crmRef.current && !crmRef.current.contains(event.target)) {
                 setIsCrmOpen(false);
+            }
+            if (analyticsRef.current && !analyticsRef.current.contains(event.target)) {
+                setIsAnalyticsOpen(false);
             }
         }
         document.addEventListener("mousedown", handleClickOutside);
@@ -78,9 +84,26 @@ export default function AgentLayout({ children }) {
                                             <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 ring-1 ring-black ring-opacity-5">
                                                 <Link onClick={() => setIsCrmOpen(false)} to="/crm/pipeline" className={`block px-4 py-2 text-sm ${isActive('/crm/pipeline') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Pipeline</Link>
                                                 <Link onClick={() => setIsCrmOpen(false)} to="/crm/directory" className={`block px-4 py-2 text-sm ${isActive('/crm/directory') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Directorio</Link>
-                                                {(user?.role === 'admin' || user?.level === 'admin') && (
-                                                    <Link onClick={() => setIsCrmOpen(false)} to="/crm/statistics" className={`block px-4 py-2 text-sm ${isActive('/crm/statistics') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Estadísticas</Link>
-                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Analytics Dropdown */}
+                                {isAdmin && (
+                                    <div className="relative" ref={analyticsRef}>
+                                        <button
+                                            onClick={() => setIsAnalyticsOpen(!isAnalyticsOpen)}
+                                            className={`flex items-center text-sm font-medium transition hover:text-primary-600 focus:outline-none ${isAnalyticsOpen || location.pathname.startsWith('/analytics') ? 'text-primary-600' : 'text-gray-700'}`}
+                                        >
+                                            Analytics
+                                            <svg className={`ml-1 w-4 h-4 transition-transform ${isAnalyticsOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                        {isAnalyticsOpen && (
+                                            <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 ring-1 ring-black ring-opacity-5">
+                                                <Link onClick={() => setIsAnalyticsOpen(false)} to="/analytics/statistics" className={`block px-4 py-2 text-sm ${isActive('/analytics/statistics') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Estadísticas</Link>
                                             </div>
                                         )}
                                     </div>

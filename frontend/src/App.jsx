@@ -155,14 +155,18 @@ function App() {
               <CRMDirectory />
             </ProtectedRoute>
           } />
-          <Route path="/crm/statistics" element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <Statistics />
-            </ProtectedRoute>
-          } />
+          <Route path="/crm/statistics" element={<Navigate to="/analytics/statistics" replace />} />
           <Route path="/crm/contacts/:id" element={
             <ProtectedRoute allowedRoles={['agent', 'admin', 'comercial']}>
               <ContactProfile />
+            </ProtectedRoute>
+          } />
+
+          {/* Analytics Routes */}
+          <Route path="/analytics" element={<Navigate to="/analytics/statistics" replace />} />
+          <Route path="/analytics/statistics" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <Statistics />
             </ProtectedRoute>
           } />
 
