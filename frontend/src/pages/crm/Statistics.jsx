@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import apiClient from '../../lib/api';
 import AgentLayout from '../../components/agent/AgentLayout';
+import CompanyPicker from '../../components/common/CompanyPicker';
 import { useAuthStore } from '../../store/authStore';
 
 const CONTRACT_LABELS = {
@@ -93,6 +94,7 @@ export default function Statistics() {
     const [fichajeGranularity, setFichajeGranularity] = useState('month');
     const [fichajeDates, setFichajeDates] = useState(defaultFichajeDates);
     const [fichajeSource, setFichajeSource] = useState('');
+    const [fichajeCompany, setFichajeCompany] = useState(null);
     const [fichajeSeries, setFichajeSeries] = useState(['total', 'entrada', 'salida', 'pausa', 'regreso']);
 
     // Directory
@@ -116,10 +118,11 @@ export default function Statistics() {
     });
 
     const { data: fichajeData, isLoading: fichajeLoading } = useQuery({
-        queryKey: ['crm_fichajes', fichajeGranularity, fichajeDates.from, fichajeDates.to, fichajeSource],
+        queryKey: ['crm_fichajes', fichajeGranularity, fichajeDates.from, fichajeDates.to, fichajeSource, fichajeCompany?.id ?? null],
         queryFn: async () => {
             const p = new URLSearchParams({ granularity: fichajeGranularity, date_from: fichajeDates.from, date_to: fichajeDates.to });
             if (fichajeSource) p.set('source', fichajeSource);
+            if (fichajeCompany) p.set('company_id', fichajeCompany.id);
             return (await apiClient.get(`/statistics/fichajes?${p}`)).data;
         },
         enabled: isAdmin && activeTab === 'fichajes',
@@ -453,7 +456,22 @@ export default function Statistics() {
                                             <option value="employee">Solo empleados</option>
                                         </select>
                                     </div>
+                                    <div className="min-w-[260px]">
+                                        <label className="block text-xs font-medium text-gray-500 mb-1">Cliente</label>
+                                        <CompanyPicker
+                                            value={fichajeCompany}
+                                            onChange={setFichajeCompany}
+                                            placeholder="Todos los clientes"
+                                        />
+                                    </div>
                                 </div>
+
+                                {fichajeCompany && (
+                                    <p className="text-xs text-gray-500">
+                                        Mostrando solo los fichajes de <span className="font-medium text-gray-700">{fichajeCompany.name}</span>.
+                                        {!fichajeCompany.external_id && ' Este cliente no está sincronizado con Intratime, así que no habrá datos.'}
+                                    </p>
+                                )}
 
                                 {/* Series toggles */}
                                 <div className="flex flex-wrap gap-2">

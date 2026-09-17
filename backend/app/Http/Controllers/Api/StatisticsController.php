@@ -294,6 +294,11 @@ class StatisticsController extends Controller
 
         $overall = (clone $base)->selectRaw($select)->first();
 
+        // Clientes distintos con actividad en el rango (no solo los del top N).
+        $companyCount = (clone $base)
+            ->distinct()
+            ->count(\Illuminate\Support\Facades\DB::raw('f.company_external_id'));
+
         $sum = fn (string $k) => (int) $companies->sum(fn ($r) => (int) $r->$k);
         $rest = [
             'entrada'  => (int) $overall->entrada - $sum('entrada'),
@@ -307,7 +312,8 @@ class StatisticsController extends Controller
         return response()->json([
             'from'      => $from->toDateString(),
             'to'        => $to->toDateString(),
-            'limit'     => $limit,
+            'limit'         => $limit,
+            'company_count' => $companyCount,
             'companies' => $companies->map(fn ($r) => [
                 'company_external_id' => $r->company_external_id,
                 'contact_id'          => $r->contact_id ? (int) $r->contact_id : null,

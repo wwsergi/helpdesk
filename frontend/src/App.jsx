@@ -24,6 +24,7 @@ import PipelineBoard from './pages/crm/PipelineBoard';
 import ContactProfile from './pages/crm/ContactProfile';
 import CRMDirectory from './pages/crm/CRMDirectory';
 import Statistics from './pages/crm/Statistics';
+import FichajesByCompany from './pages/analytics/FichajesByCompany';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -167,6 +168,11 @@ function App() {
           <Route path="/analytics/statistics" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <Statistics />
+            </ProtectedRoute>
+          } />
+          <Route path="/analytics/fichajes-por-empresa" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <FichajesByCompany />
             </ProtectedRoute>
           } />
 
