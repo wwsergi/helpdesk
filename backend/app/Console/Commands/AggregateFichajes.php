@@ -105,6 +105,10 @@ class AggregateFichajes extends Command
                         . ' SUM(ll.INOUT_TYPE = 1) as clock_out,'
                         . ' SUM(ll.INOUT_TYPE = 2) as pause,'
                         . ' SUM(ll.INOUT_TYPE = 3) as return_count,'
+                        . ' SUM(ll.INOUT_TYPE = 0 AND ll.INOUT_SOURCE = 3) as clock_in_manual,'
+                        . ' SUM(ll.INOUT_TYPE = 1 AND ll.INOUT_SOURCE = 3) as clock_out_manual,'
+                        . ' SUM(ll.INOUT_TYPE = 2 AND ll.INOUT_SOURCE = 3) as pause_manual,'
+                        . ' SUM(ll.INOUT_TYPE = 3 AND ll.INOUT_SOURCE = 3) as return_manual,'
                         . ' SUM(ll.INOUT_SOURCE = 3) as manual_count,'
                         . ' COUNT(DISTINCT ll.INOUT_USER_ID) as active_users,'
                         . ' MAX(c.COMPANY_CURRENT_USERS) as headcount'
@@ -128,6 +132,10 @@ class AggregateFichajes extends Command
                         'clock_out'           => (int) $r->clock_out,
                         'pause'               => (int) $r->pause,
                         'return_count'        => (int) $r->return_count,
+                        'clock_in_manual'     => (int) $r->clock_in_manual,
+                        'clock_out_manual'    => (int) $r->clock_out_manual,
+                        'pause_manual'        => (int) $r->pause_manual,
+                        'return_manual'       => (int) $r->return_manual,
                         'manual_count'        => (int) $r->manual_count,
                         'active_users'        => (int) $r->active_users,
                         'headcount'           => $r->headcount !== null ? (int) $r->headcount : null,

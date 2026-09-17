@@ -151,6 +151,26 @@ class StatisticsController extends Controller
             $from = $to->copy()->subMonths($maxMonths)->startOfDay();
         }
 
+        // Filtro por empresa (opcional). Cuando llega, la serie sale de la tabla
+        // desglosada por empresa en vez de la global; el formato de respuesta es
+        // idéntico para que el gráfico no se entere.
+        $companyId = $request->input('company_id');
+        if ($companyId) {
+            $externalId = Contact::where('tenant_id', $request->user()->tenant_id)
+                ->where('id', $companyId)
+                ->value('external_id');
+
+            // Sin external_id no hay forma de cruzar con Intratime: serie vacía,
+            // que es más honesto que devolver los totales globales.
+            if (!$externalId) {
+                return response()->json([]);
+            }
+
+            return response()->json($this->fichajesSeriesForCompany(
+                $externalId, $from, $to, $format, $source
+            ));
+        }
+
         $rows = \Illuminate\Support\Facades\DB::table('fichaje_daily_stats')
             ->where('day', '>=', $from->format('Y-m-d'))
             ->where('day', '<=', $to->format('Y-m-d'))
@@ -175,5 +195,143 @@ class StatisticsController extends Controller
         }
 
         return response()->json(array_values($periods));
+    }
+
+    /**
+     * Serie temporal de fichajes de UNA empresa, leyendo de
+     * fichaje_company_daily_stats. Devuelve el mismo formato que fichajes().
+     */
+    private function fichajesSeriesForCompany(string $externalId, Carbon $from, Carbon $to, string $format, ?string $source): array
+    {
+        // Según el origen pedido se suman las columnas totales, solo las de
+        // manuales, o la diferencia (lo fichado por el propio empleado).
+        $expr = fn (string $total, string $manual) => match ($source) {
+            'manual'   => "SUM($manual)",
+            'employee' => "SUM($total - $manual)",
+            default    => "SUM($total)",
+        };
+
+        $rows = \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats')
+            ->where('company_external_id', $externalId)
+            ->where('day', '>=', $from->format('Y-m-d'))
+            ->where('day', '<=', $to->format('Y-m-d'))
+            ->selectRaw(
+                "DATE_FORMAT(day, ?) as period, "
+                . $expr('clock_in', 'clock_in_manual') . " as entrada, "
+                . $expr('clock_out', 'clock_out_manual') . " as salida, "
+                . $expr('pause', 'pause_manual') . " as pausa, "
+                . $expr('return_count', 'return_manual') . " as regreso",
+                [$format]
+            )
+            ->groupBy('period')
+            ->orderBy('period')
+            ->get();
+
+        return $rows->map(fn ($r) => [
+            'period'  => $r->period,
+            'entrada' => (int) $r->entrada,
+            'salida'  => (int) $r->salida,
+            'pausa'   => (int) $r->pausa,
+            'regreso' => (int) $r->regreso,
+            'total'   => (int) $r->entrada + (int) $r->salida + (int) $r->pausa + (int) $r->regreso,
+        ])->all();
+    }
+
+    /**
+     * Ranking de empresas por volumen de fichajes en un rango, con el reparto
+     * por tipo. Devuelve el top N, una fila agregada con el resto, y el total.
+     */
+    public function fichajesByCompany(Request $request)
+    {
+        if ($request->user()->level !== 'admin' && $request->user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $tenantId = $request->user()->tenant_id;
+        $limit = min(200, max(1, (int) $request->input('limit', 50)));
+
+        try {
+            $to = $request->filled('date_to') ? Carbon::parse($request->date_to)->endOfDay() : Carbon::now()->endOfDay();
+        } catch (\Throwable $e) {
+            $to = Carbon::now()->endOfDay();
+        }
+        try {
+            $from = $request->filled('date_from') ? Carbon::parse($request->date_from)->startOfDay() : $to->copy()->subMonths(3)->startOfDay();
+        } catch (\Throwable $e) {
+            $from = $to->copy()->subMonths(3)->startOfDay();
+        }
+        if ($from->greaterThan($to)) {
+            $from = $to->copy()->subMonths(3)->startOfDay();
+        }
+
+        // leftJoin a propósito: ~2,5% de las empresas que fichan aún no están
+        // sincronizadas como contacto, y dejarlas fuera falsearía los totales.
+        $base = \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats as f')
+            ->leftJoin('contacts as c', function ($j) use ($tenantId) {
+                $j->on('c.external_id', '=', 'f.company_external_id')
+                  ->where('c.tenant_id', '=', $tenantId);
+            })
+            ->where('f.day', '>=', $from->format('Y-m-d'))
+            ->where('f.day', '<=', $to->format('Y-m-d'))
+            ->when($request->filled('plan'), fn ($q) => $q->where('c.subscription_plan', $request->input('plan')))
+            ->when($request->filled('distributor_id'), fn ($q) => $q->where('c.distributor_id', (int) $request->input('distributor_id')))
+            ->when($request->filled('contact_id'), fn ($q) => $q->where('c.id', (int) $request->input('contact_id')));
+
+        $select = 'SUM(f.clock_in) as entrada, SUM(f.clock_out) as salida, SUM(f.pause) as pausa,'
+            . ' SUM(f.return_count) as regreso, SUM(f.manual_count) as manuales,'
+            . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total';
+
+        $companies = (clone $base)
+            ->selectRaw(
+                'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan,'
+                . ' c.distributor_id, MAX(f.headcount) as headcount, MAX(f.active_users) as max_active_users, '
+                . $select
+            )
+            ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
+            ->orderByDesc('total')
+            ->limit($limit)
+            ->get();
+
+        $overall = (clone $base)->selectRaw($select)->first();
+
+        $sum = fn (string $k) => (int) $companies->sum(fn ($r) => (int) $r->$k);
+        $rest = [
+            'entrada'  => (int) $overall->entrada - $sum('entrada'),
+            'salida'   => (int) $overall->salida  - $sum('salida'),
+            'pausa'    => (int) $overall->pausa   - $sum('pausa'),
+            'regreso'  => (int) $overall->regreso - $sum('regreso'),
+            'manuales' => (int) $overall->manuales - $sum('manuales'),
+            'total'    => (int) $overall->total   - $sum('total'),
+        ];
+
+        return response()->json([
+            'from'      => $from->toDateString(),
+            'to'        => $to->toDateString(),
+            'limit'     => $limit,
+            'companies' => $companies->map(fn ($r) => [
+                'company_external_id' => $r->company_external_id,
+                'contact_id'          => $r->contact_id ? (int) $r->contact_id : null,
+                'name'                => $r->name ?: '(sin contacto sincronizado)',
+                'plan'                => $r->plan,
+                'distributor_id'      => $r->distributor_id ? (int) $r->distributor_id : null,
+                'headcount'           => $r->headcount !== null ? (int) $r->headcount : null,
+                'active_users'        => (int) $r->max_active_users,
+                'entrada'             => (int) $r->entrada,
+                'salida'              => (int) $r->salida,
+                'pausa'               => (int) $r->pausa,
+                'regreso'             => (int) $r->regreso,
+                'manuales'            => (int) $r->manuales,
+                'total'               => (int) $r->total,
+            ])->all(),
+            'rest'   => $rest['total'] > 0 ? $rest : null,
+            'totals' => [
+                'entrada'  => (int) $overall->entrada,
+                'salida'   => (int) $overall->salida,
+                'pausa'    => (int) $overall->pausa,
+                'regreso'  => (int) $overall->regreso,
+                'manuales' => (int) $overall->manuales,
+                'total'    => (int) $overall->total,
+            ],
+        ]);
     }
 }
