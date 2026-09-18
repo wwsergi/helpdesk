@@ -135,6 +135,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::middleware('admin')->get('/statistics/registrations', [\App\Http\Controllers\Api\StatisticsController::class, 'registrations']);
     Route::middleware('admin')->get('/statistics/fichajes', [\App\Http\Controllers\Api\StatisticsController::class, 'fichajes']);
     Route::middleware('admin')->get('/statistics/fichajes-by-company', [\App\Http\Controllers\Api\StatisticsController::class, 'fichajesByCompany']);
+    Route::middleware('admin')->get('/statistics/fichajes-health', [\App\Http\Controllers\Api\StatisticsController::class, 'fichajesHealth']);
 
     // Dashboard
     Route::get('/dashboard/stats', [\App\Http\Controllers\Api\DashboardController::class, 'stats']);

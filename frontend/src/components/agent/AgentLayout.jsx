@@ -105,6 +105,7 @@ export default function AgentLayout({ children }) {
                                             <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-50 ring-1 ring-black ring-opacity-5">
                                                 <Link onClick={() => setIsAnalyticsOpen(false)} to="/analytics/statistics" className={`block px-4 py-2 text-sm ${isActive('/analytics/statistics') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Estadísticas</Link>
                                                 <Link onClick={() => setIsAnalyticsOpen(false)} to="/analytics/fichajes-por-empresa" className={`block px-4 py-2 text-sm ${isActive('/analytics/fichajes-por-empresa') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Fichajes por Empresa</Link>
+                                                <Link onClick={() => setIsAnalyticsOpen(false)} to="/analytics/calidad-fichaje" className={`block px-4 py-2 text-sm ${isActive('/analytics/calidad-fichaje') ? 'bg-gray-100 text-primary-600' : 'text-gray-700 hover:bg-gray-100'}`}>Calidad de fichaje</Link>
                                             </div>
                                         )}
                                     </div>

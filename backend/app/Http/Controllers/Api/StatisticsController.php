@@ -284,8 +284,9 @@ class StatisticsController extends Controller
         $companies = (clone $base)
             ->selectRaw(
                 'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan,'
-                . ' c.distributor_id, MAX(f.headcount) as headcount, MAX(f.active_users) as max_active_users,'
-                . ' SUM(f.active_users) as user_days, '
+                . ' c.distributor_id, MAX(f.headcount) as headcount, MAX(f.active_users) as peak_users,'
+                . ' SUM(f.active_users) as user_days,'
+                . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla, '
                 . $select
             )
             ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
@@ -315,23 +316,12 @@ class StatisticsController extends Controller
             'to'        => $to->toDateString(),
             'limit'         => $limit,
             'company_count' => $companyCount,
-            'companies' => $companies->map(fn ($r) => [
-                'company_external_id' => $r->company_external_id,
-                'contact_id'          => $r->contact_id ? (int) $r->contact_id : null,
-                'name'                => $r->name ?: '(sin contacto sincronizado)',
-                'plan'                => $r->plan,
-                'distributor_id'      => $r->distributor_id ? (int) $r->distributor_id : null,
-                'headcount'           => $r->headcount !== null ? (int) $r->headcount : null,
-                'active_users'        => (int) $r->max_active_users,
-                // Suma de empleados activos por día: la base para medir cuántos
-                // fichajes hace cada empleado en una jornada.
-                'user_days'           => (int) $r->user_days,
-                'entrada'             => (int) $r->entrada,
-                'salida'              => (int) $r->salida,
-                'pausa'               => (int) $r->pausa,
-                'regreso'             => (int) $r->regreso,
-                'manuales'            => (int) $r->manuales,
-                'total'               => (int) $r->total,
+            // El estado sale del mismo evaluador que usa la pantalla de calidad:
+            // los umbrales viven en un único sitio y las dos pantallas no pueden
+            // contradecirse.
+            'companies' => $companies->map(fn ($r) => $this->evaluateCompanyHealth($r) + [
+                'user_days' => (int) $r->user_days,
+                'headcount' => $r->headcount !== null ? (int) $r->headcount : null,
             ])->all(),
             'rest'   => $rest['total'] > 0 ? $rest : null,
             'totals' => [
@@ -343,5 +333,211 @@ class StatisticsController extends Controller
                 'total'    => (int) $overall->total,
             ],
         ]);
+    }
+
+    /** Umbrales del semáforo de calidad. Salen de la distribución real de la
+     *  cartera, no de criterio: el 88% de las empresas queda por debajo del 5%
+     *  de descuadre, y la moda de intensidad es 2-2,5 fichajes por empleado y
+     *  día (una entrada y una salida). Viven aquí, en un único sitio, para que
+     *  el ranking y la pantalla de calidad no puedan discrepar. */
+    private const GAP_WARN = 5;
+    private const GAP_CRIT = 10;
+    private const PER_USER_WARN = 2;
+    private const PER_USER_CRIT = 1.5;
+    private const MIN_VOLUME = 20;
+    /** Un descuadre en porcentaje sobre una base diminuta no dice nada: 8 pausas
+     *  frente a 7 regresos es un 12,5% y es sencillamente un empleado. Cada par
+     *  se evalúa solo si tiene al menos este volumen, con lo que un 10% pasa a
+     *  significar 2 fichajes o más. */
+    private const MIN_PAIR_VOLUME = 20;
+
+    /**
+     * Calidad de fichaje de TODOS los clientes con actividad (~6.500), con los
+     * mismos filtros que el ranking más filtro por estado, orden y paginación.
+     */
+    public function fichajesHealth(Request $request)
+    {
+        if ($request->user()->level !== 'admin' && $request->user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $tenantId = $request->user()->tenant_id;
+        $perPage = min(200, max(10, (int) $request->input('per_page', 50)));
+        $page    = max(1, (int) $request->input('page', 1));
+
+        try {
+            $to = $request->filled('date_to') ? Carbon::parse($request->date_to)->endOfDay() : Carbon::now()->endOfDay();
+        } catch (\Throwable $e) {
+            $to = Carbon::now()->endOfDay();
+        }
+        try {
+            $from = $request->filled('date_from') ? Carbon::parse($request->date_from)->startOfDay() : $to->copy()->subMonths(3)->startOfDay();
+        } catch (\Throwable $e) {
+            $from = $to->copy()->subMonths(3)->startOfDay();
+        }
+        if ($from->greaterThan($to)) {
+            $from = $to->copy()->subMonths(3)->startOfDay();
+        }
+
+        // Una sola consulta agregada: ~6.500 empresas en ~130 ms. El semáforo se
+        // calcula luego en PHP sobre ese resultado, que es más legible que
+        // anidar tres subconsultas y cuesta lo mismo a este volumen.
+        $rows = \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats as f')
+            ->leftJoin('contacts as c', function ($j) use ($tenantId) {
+                $j->on('c.external_id', '=', 'f.company_external_id')
+                  ->where('c.tenant_id', '=', $tenantId);
+            })
+            ->where('f.day', '>=', $from->format('Y-m-d'))
+            ->where('f.day', '<=', $to->format('Y-m-d'))
+            ->when($request->filled('plan'), fn ($q) => $q->where('c.subscription_plan', $request->input('plan')))
+            ->when($request->filled('distributor_id'), fn ($q) => $q->where('c.distributor_id', (int) $request->input('distributor_id')))
+            ->when($request->filled('contact_id'), fn ($q) => $q->where('c.id', (int) $request->input('contact_id')))
+            ->when($request->filled('search'), fn ($q) => $q->where('c.name', 'like', '%' . $request->input('search') . '%'))
+            ->selectRaw(
+                'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan, c.distributor_id,'
+                . ' SUM(f.clock_in) as entrada, SUM(f.clock_out) as salida,'
+                . ' SUM(f.pause) as pausa, SUM(f.return_count) as regreso,'
+                . ' SUM(f.manual_count) as manuales,'
+                . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total,'
+                . ' SUM(f.active_users) as user_days, MAX(f.active_users) as peak_users,'
+                . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla'
+            )
+            ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
+            ->get();
+
+        $evaluated = $rows->map(fn ($r) => $this->evaluateCompanyHealth($r));
+
+        // Resumen sobre TODAS las empresas que pasan los filtros, no solo la
+        // página: si no, el reparto del semáforo cambiaría al pasar de página.
+        $summary = [
+            'clients'  => $evaluated->count(),
+            'good'     => $evaluated->where('status', 'good')->count(),
+            'warning'  => $evaluated->where('status', 'warning')->count(),
+            'critical' => $evaluated->where('status', 'critical')->count(),
+            'unknown'  => $evaluated->where('status', 'unknown')->count(),
+            'total_fichajes' => (int) $evaluated->sum('total'),
+        ];
+        $withUsage = $evaluated->whereNotNull('usage_pct');
+        $summary['usage_avg'] = $withUsage->count() ? round($withUsage->avg('usage_pct'), 1) : null;
+        $summary['usage_unknown'] = $evaluated->count() - $withUsage->count();
+
+        if ($request->filled('status')) {
+            $evaluated = $evaluated->where('status', $request->input('status'))->values();
+        }
+
+        $severity = ['unknown' => 0, 'good' => 1, 'warning' => 2, 'critical' => 3];
+        $sort = $request->input('sort', 'total');
+        $desc = $request->input('dir', 'desc') !== 'asc';
+        // Las métricas que pueden faltar (uso, intensidad, descuadre) van SIEMPRE
+        // al final, ordene como ordene: quien ordena por "peor uso" quiere ver
+        // los peores datos reales, no la lista de los que no tienen dato.
+        $last = $desc ? -INF : INF;
+        $evaluated = $evaluated->sortBy(function ($r) use ($sort, $severity, $last) {
+            return match ($sort) {
+                'name'     => mb_strtolower((string) ($r['name'] ?? '')),
+                'status'   => $severity[$r['status']],
+                'usage'    => $r['usage_pct'] ?? $last,
+                'per_user' => $r['per_user'] ?? $last,
+                'gap'      => ($r['gap_io'] === null && $r['gap_pr'] === null)
+                    ? $last
+                    : max($r['gap_io'] ?? 0, $r['gap_pr'] ?? 0),
+                default    => $r['total'],
+            };
+        }, SORT_REGULAR, $desc)->values();
+
+        $total = $evaluated->count();
+
+        return response()->json([
+            'from'     => $from->toDateString(),
+            'to'       => $to->toDateString(),
+            'summary'  => $summary,
+            'data'     => $evaluated->forPage($page, $perPage)->values()->all(),
+            'page'     => $page,
+            'per_page' => $perPage,
+            'total'    => $total,
+            'last_page' => max(1, (int) ceil($total / $perPage)),
+            'thresholds' => [
+                'gap_warn' => self::GAP_WARN, 'gap_crit' => self::GAP_CRIT,
+                'per_user_warn' => self::PER_USER_WARN, 'per_user_crit' => self::PER_USER_CRIT,
+                'min_volume' => self::MIN_VOLUME,
+            ],
+        ]);
+    }
+
+    /** Aplica las tres señales a una empresa y devuelve estado + motivos. */
+    private function evaluateCompanyHealth($r): array
+    {
+        $entrada = (int) $r->entrada; $salida = (int) $r->salida;
+        $pausa = (int) $r->pausa;     $regreso = (int) $r->regreso;
+        $total = (int) $r->total;     $userDays = (int) $r->user_days;
+        $plantilla = $r->plantilla !== null ? (int) $r->plantilla : null;
+        $peak = (int) $r->peak_users;
+
+        $gap = function (int $a, int $b): ?float {
+            $max = max($a, $b);
+            if ($max < self::MIN_PAIR_VOLUME) {
+                return null; // base insuficiente: el porcentaje sería ruido
+            }
+            return abs($a - $b) / $max * 100;
+        };
+        $gapIo = $gap($entrada, $salida);
+        $gapPr = $gap($pausa, $regreso);
+        $perUser = $userDays ? $total / $userDays : null;
+
+        // Puede pasar del 100%: COMPANY_CURRENT_USERS se queda corto a menudo.
+        // Se recorta para que el indicador no mienta al alza.
+        $usage = ($plantilla && $plantilla > 0) ? min(100, $peak / $plantilla * 100) : null;
+
+        $reasons = [];
+        $status = 'good';
+
+        if ($total < self::MIN_VOLUME) {
+            $status = 'unknown';
+            $reasons[] = "Solo {$total} fichajes en el rango: muy pocos para valorar.";
+        } else {
+            if ($gapIo !== null && $gapIo >= self::GAP_WARN) {
+                $falta = $entrada > $salida ? 'salidas' : 'entradas';
+                $reasons[] = sprintf('Entradas %s frente a salidas %s: %.1f %% de diferencia. Faltan %s.', number_format($entrada, 0, ',', '.'), number_format($salida, 0, ',', '.'), $gapIo, $falta);
+            }
+            if ($gapPr !== null && $gapPr >= self::GAP_WARN) {
+                $falta = $pausa > $regreso ? 'regresos' : 'pausas';
+                $reasons[] = sprintf('Pausas %s frente a regresos %s: %.1f %% de diferencia. Faltan %s.', number_format($pausa, 0, ',', '.'), number_format($regreso, 0, ',', '.'), $gapPr, $falta);
+            }
+            if ($perUser !== null && $perUser < self::PER_USER_WARN) {
+                $reasons[] = sprintf('%.2f fichajes por empleado y día, cuando una jornada completa son 2 como mínimo. Hay jornadas sin cerrar.', $perUser);
+            }
+
+            $worstGap = max($gapIo ?? 0, $gapPr ?? 0);
+            $gapLevel = $worstGap >= self::GAP_CRIT ? 3 : ($worstGap >= self::GAP_WARN ? 2 : 1);
+            $puLevel = 1;
+            if ($perUser !== null && $perUser < self::PER_USER_WARN) {
+                $puLevel = $perUser < self::PER_USER_CRIT ? 3 : 2;
+            }
+            $level = max($gapLevel, $puLevel);
+            $status = [1 => 'good', 2 => 'warning', 3 => 'critical'][$level];
+
+            if ($status === 'good') {
+                $reasons[] = 'Entradas y salidas cuadran, las pausas se cierran y cada empleado ficha su jornada completa.';
+            }
+        }
+
+        return [
+            'company_external_id' => $r->company_external_id,
+            'contact_id' => $r->contact_id ? (int) $r->contact_id : null,
+            'name'       => $r->name ?: '(sin contacto sincronizado)',
+            'plan'       => $r->plan,
+            'distributor_id' => $r->distributor_id ? (int) $r->distributor_id : null,
+            'entrada' => $entrada, 'salida' => $salida, 'pausa' => $pausa, 'regreso' => $regreso,
+            'manuales' => (int) $r->manuales,
+            'total' => $total,
+            'active_users' => $peak,
+            'plantilla' => $plantilla,
+            'usage_pct' => $usage !== null ? round($usage, 1) : null,
+            'gap_io'   => $gapIo !== null ? round($gapIo, 1) : null,
+            'gap_pr'   => $gapPr !== null ? round($gapPr, 1) : null,
+            'per_user' => $perUser !== null ? round($perUser, 2) : null,
+            'status'   => $status,
+            'reasons'  => $reasons,
+        ];
     }
 }

@@ -25,6 +25,7 @@ import ContactProfile from './pages/crm/ContactProfile';
 import CRMDirectory from './pages/crm/CRMDirectory';
 import Statistics from './pages/crm/Statistics';
 import FichajesByCompany from './pages/analytics/FichajesByCompany';
+import ClockingQuality from './pages/analytics/ClockingQuality';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -173,6 +174,11 @@ function App() {
           <Route path="/analytics/fichajes-por-empresa" element={
             <ProtectedRoute allowedRoles={['admin']}>
               <FichajesByCompany />
+            </ProtectedRoute>
+          } />
+          <Route path="/analytics/calidad-fichaje" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <ClockingQuality />
             </ProtectedRoute>
           } />
 

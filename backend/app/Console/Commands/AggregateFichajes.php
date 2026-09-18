@@ -41,6 +41,26 @@ class AggregateFichajes extends Command
 
         $this->info(sprintf('Agregando fichajes día a día: %s → %s', $start->toDateString(), $end->toDateString()));
 
+        // Plantilla activa por empresa. Se resuelve UNA vez por ejecución (una
+        // consulta de ~68k filas) en vez de por día: el valor es el de hoy, no
+        // el histórico, porque Intratime no guarda esa evolución.
+        $activeHeadcount = [];
+        try {
+            foreach ($conn->table('users')
+                ->where('USER_IS_ACTIVE', 1)
+                ->whereNotNull('USER_COMPANY')
+                ->where('USER_COMPANY', '<>', '')
+                ->selectRaw('USER_COMPANY as company, COUNT(*) as n')
+                ->groupBy('USER_COMPANY')
+                ->cursor() as $row) {
+                $activeHeadcount[(string) $row->company] = (int) $row->n;
+            }
+            $this->info(sprintf('Plantilla activa resuelta para %d empresas.', count($activeHeadcount)));
+        } catch (\Throwable $e) {
+            $this->warn('No se pudo calcular la plantilla activa: ' . $e->getMessage());
+            Log::warning('fichajes:aggregate — plantilla activa falló: ' . $e->getMessage());
+        }
+
         $now = Carbon::now();
         $totalDays = 0;
         $totalRows = 0;
@@ -122,7 +142,7 @@ class AggregateFichajes extends Command
                 $byCompany = collect();
             }
 
-            DB::transaction(function () use ($byCompany, $dayStr, $now, &$companyRows) {
+            DB::transaction(function () use ($byCompany, $dayStr, $now, $activeHeadcount, &$companyRows) {
                 DB::table('fichaje_company_daily_stats')->where('day', $dayStr)->delete();
                 foreach ($byCompany->chunk(500) as $chunk) {
                     $insert = $chunk->map(fn ($r) => [
@@ -139,6 +159,7 @@ class AggregateFichajes extends Command
                         'manual_count'        => (int) $r->manual_count,
                         'active_users'        => (int) $r->active_users,
                         'headcount'           => $r->headcount !== null ? (int) $r->headcount : null,
+                        'active_headcount'    => $activeHeadcount[(string) $r->company] ?? null,
                         'updated_at'          => $now,
                     ])->values()->all();
                     DB::table('fichaje_company_daily_stats')->insert($insert);

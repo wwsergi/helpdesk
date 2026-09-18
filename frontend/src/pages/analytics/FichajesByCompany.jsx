@@ -4,6 +4,7 @@ import apiClient from '../../lib/api';
 import AgentLayout from '../../components/agent/AgentLayout';
 import CompanyPicker from '../../components/common/CompanyPicker';
 import { useAuthStore } from '../../store/authStore';
+import HealthLight, { HealthLegend } from '../../components/common/HealthLight';
 
 // Orden fijo, el mismo que define Intratime en clocking_types.order:
 // entrada → pausa → regreso → salida. Nunca se cicla ni se reordena: el color
@@ -19,141 +20,6 @@ const PLANS = ['Demo', 'Basic', 'Pro'];
 const DISTRIBUTORS = [{ id: 1, label: 'Conversia' }, { id: 2, label: 'Winworld' }];
 
 const nf = new Intl.NumberFormat('es-ES');
-
-// Paleta de estado del sistema de diseño: fija, nunca se reutiliza para series.
-const HEALTH = {
-    good:     { color: '#0ca30c', glyph: '✓', label: 'Correcto' },
-    warning:  { color: '#fab219', glyph: '!', label: 'Revisar' },
-    critical: { color: '#d03b3b', glyph: '✕', label: 'Fichaje incorrecto' },
-    unknown:  { color: '#9ca3af', glyph: '–', label: 'Sin datos suficientes' },
-};
-
-// Umbrales sacados de la distribución real de la cartera, no a ojo: el 88% de
-// las empresas queda por debajo del 5% de descuadre, así que 5% y 10% dejan en
-// rojo al ~3% — pocas y accionables.
-const WARN_AT = 5;
-const CRIT_AT = 10;
-const MIN_VOLUME = 20; // por debajo, el porcentaje es puro ruido
-
-// Fichajes por empleado y día. Una jornada bien fichada son 2 como mínimo
-// (entrada + salida); con pausas, 4. La moda real de la cartera cae en 2-2,5,
-// así que por debajo de 2 hay jornadas sin cerrar y por debajo de 1,5 el
-// fichaje está roto (solo el 0,2% de las empresas llega a ese extremo).
-const PER_USER_WARN = 2;
-const PER_USER_CRIT = 1.5;
-
-/**
- * Cada entrada debería tener su salida, y cada pausa su regreso. Cuando no
- * cuadran, o la gente se olvida de fichar o lo hace mal.
- */
-function clockingHealth(row) {
-    const total = (row.entrada || 0) + (row.salida || 0) + (row.pausa || 0) + (row.regreso || 0);
-    if (total < MIN_VOLUME) {
-        return { level: 'unknown', reasons: [`Solo ${nf.format(total)} fichajes en el rango: muy pocos para valorar el descuadre.`] };
-    }
-
-    const gap = (a, b) => {
-        const max = Math.max(a, b);
-        return max ? (Math.abs(a - b) / max) * 100 : null;
-    };
-
-    const io = gap(row.entrada || 0, row.salida || 0);
-    const pr = gap(row.pausa || 0, row.regreso || 0);
-
-    const reasons = [];
-    if (io !== null && io >= WARN_AT) {
-        const falta = (row.entrada || 0) > (row.salida || 0) ? 'salidas' : 'entradas';
-        reasons.push(`Entradas ${nf.format(row.entrada || 0)} frente a salidas ${nf.format(row.salida || 0)}: ${io.toFixed(1)} % de diferencia. Faltan ${falta}.`);
-    }
-    if (pr !== null && pr >= WARN_AT) {
-        const falta = (row.pausa || 0) > (row.regreso || 0) ? 'regresos' : 'pausas';
-        reasons.push(`Pausas ${nf.format(row.pausa || 0)} frente a regresos ${nf.format(row.regreso || 0)}: ${pr.toFixed(1)} % de diferencia. Faltan ${falta}.`);
-    }
-
-    // Tercera señal: intensidad de fichaje por empleado. Detecta el caso que los
-    // descuadres no ven — plantilla que ficha la entrada y ya no vuelve a tocar
-    // el reloj, con entradas y salidas igual de bajas y por tanto "cuadradas".
-    let perUserLevel = 'good';
-    const perUser = row.user_days ? total / row.user_days : null;
-    if (perUser !== null && perUser < PER_USER_WARN) {
-        perUserLevel = perUser < PER_USER_CRIT ? 'critical' : 'warning';
-        reasons.push(`${perUser.toFixed(2)} fichajes por empleado y día, cuando una jornada completa son 2 como mínimo (entrada y salida). Hay jornadas sin cerrar.`);
-    }
-
-    const gapWorst = Math.max(io ?? 0, pr ?? 0);
-    const gapLevel = gapWorst >= CRIT_AT ? 'critical' : gapWorst >= WARN_AT ? 'warning' : 'good';
-
-    // Manda la peor de las señales.
-    const rank = { good: 0, warning: 1, critical: 2 };
-    const level = rank[perUserLevel] > rank[gapLevel] ? perUserLevel : gapLevel;
-
-    if (level === 'good') reasons.push('Entradas y salidas cuadran, las pausas se cierran y cada empleado ficha su jornada completa.');
-
-    return { level, reasons };
-}
-
-/** Semáforo. Color + glifo + etiqueta accesible: nunca solo el color. */
-function HealthLight({ row, onHover, onLeave }) {
-    const { level, reasons } = clockingHealth(row);
-    const cfg = HEALTH[level];
-    const text = `${cfg.label}. ${reasons.join(' ')}`;
-    return (
-        <span
-            role="img"
-            aria-label={text}
-            tabIndex={0}
-            onMouseEnter={e => onHover(e, text)}
-            onMouseMove={e => onHover(e, text)}
-            onMouseLeave={onLeave}
-            onFocus={e => onHover(e, text)}
-            onBlur={onLeave}
-            className="inline-flex items-center justify-center w-5 h-5 rounded-full text-white text-[11px] font-bold cursor-help shrink-0"
-            style={{ backgroundColor: cfg.color }}
-        >{cfg.glyph}</span>
-    );
-}
-
-
-function defaultDates() {
-    const to = new Date();
-    const from = new Date();
-    from.setMonth(from.getMonth() - 3);
-    return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
-}
-
-/** Barra apilada normalizada: todas miden lo mismo, solo cambia el reparto. */
-function SplitBar({ row, onHover, onLeave }) {
-    const total = SERIES.reduce((a, s) => a + (row[s.key] || 0), 0);
-    if (!total) return <div className="h-3 rounded bg-gray-100" />;
-
-    const visible = SERIES.filter(s => (row[s.key] || 0) > 0);
-
-    return (
-        <div className="flex h-3 w-full gap-[2px]">
-            {visible.map((s, i) => {
-                const pct = (row[s.key] / total) * 100;
-                const first = i === 0;
-                const last = i === visible.length - 1;
-                return (
-                    <div
-                        key={s.key}
-                        style={{
-                            width: `${pct}%`,
-                            backgroundColor: s.color,
-                            borderTopLeftRadius: first ? 4 : 0,
-                            borderBottomLeftRadius: first ? 4 : 0,
-                            borderTopRightRadius: last ? 4 : 0,
-                            borderBottomRightRadius: last ? 4 : 0,
-                        }}
-                        onMouseEnter={e => onHover(e, `${s.label}: ${nf.format(row[s.key])} (${pct.toFixed(1)} %)`)}
-                        onMouseMove={e => onHover(e, `${s.label}: ${nf.format(row[s.key])} (${pct.toFixed(1)} %)`)}
-                        onMouseLeave={onLeave}
-                    />
-                );
-            })}
-        </div>
-    );
-}
 
 export default function FichajesByCompany() {
     const { user } = useAuthStore();
@@ -305,13 +171,7 @@ export default function FichajesByCompany() {
                         </div>
                     ))}
                     <span className="hidden md:inline-block h-4 w-px bg-gray-300 mx-1" />
-                    {['good', 'warning', 'critical'].map(k => (
-                        <div key={k} className="flex items-center gap-2">
-                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold"
-                                style={{ backgroundColor: HEALTH[k].color }}>{HEALTH[k].glyph}</span>
-                            <span className="text-sm text-gray-600">{HEALTH[k].label}</span>
-                        </div>
-                    ))}
+                    <HealthLegend />
                 </div>
 
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -340,7 +200,7 @@ export default function FichajesByCompany() {
                                         {nf.format(r.total)}
                                     </span>
                                     <span className="w-5 flex justify-center">
-                                        {!r.isRest && <HealthLight row={r} onHover={onHover} onLeave={onLeave} />}
+                                        {!r.isRest && <HealthLight status={r.status} reasons={r.reasons} onHover={onHover} onLeave={onLeave} />}
                                     </span>
                                 </div>
                             ))}
@@ -373,7 +233,7 @@ export default function FichajesByCompany() {
                                             <td className="px-4 py-2 text-right tabular-nums text-gray-500">{nf.format(r.manuales || 0)}</td>
                                             <td className="px-4 py-2 text-right tabular-nums font-medium text-gray-900">{nf.format(r.total)}</td>
                                             <td className="px-4 py-2 text-center">
-                                                {!r.isRest && <HealthLight row={r} onHover={onHover} onLeave={onLeave} />}
+                                                {!r.isRest && <HealthLight status={r.status} reasons={r.reasons} onHover={onHover} onLeave={onLeave} />}
                                             </td>
                                         </tr>
                                     ))}
