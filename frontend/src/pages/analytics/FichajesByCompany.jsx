@@ -20,6 +20,100 @@ const DISTRIBUTORS = [{ id: 1, label: 'Conversia' }, { id: 2, label: 'Winworld' 
 
 const nf = new Intl.NumberFormat('es-ES');
 
+// Paleta de estado del sistema de diseño: fija, nunca se reutiliza para series.
+const HEALTH = {
+    good:     { color: '#0ca30c', glyph: '✓', label: 'Correcto' },
+    warning:  { color: '#fab219', glyph: '!', label: 'Revisar' },
+    critical: { color: '#d03b3b', glyph: '✕', label: 'Fichaje incorrecto' },
+    unknown:  { color: '#9ca3af', glyph: '–', label: 'Sin datos suficientes' },
+};
+
+// Umbrales sacados de la distribución real de la cartera, no a ojo: el 88% de
+// las empresas queda por debajo del 5% de descuadre, así que 5% y 10% dejan en
+// rojo al ~3% — pocas y accionables.
+const WARN_AT = 5;
+const CRIT_AT = 10;
+const MIN_VOLUME = 20; // por debajo, el porcentaje es puro ruido
+
+// Fichajes por empleado y día. Una jornada bien fichada son 2 como mínimo
+// (entrada + salida); con pausas, 4. La moda real de la cartera cae en 2-2,5,
+// así que por debajo de 2 hay jornadas sin cerrar y por debajo de 1,5 el
+// fichaje está roto (solo el 0,2% de las empresas llega a ese extremo).
+const PER_USER_WARN = 2;
+const PER_USER_CRIT = 1.5;
+
+/**
+ * Cada entrada debería tener su salida, y cada pausa su regreso. Cuando no
+ * cuadran, o la gente se olvida de fichar o lo hace mal.
+ */
+function clockingHealth(row) {
+    const total = (row.entrada || 0) + (row.salida || 0) + (row.pausa || 0) + (row.regreso || 0);
+    if (total < MIN_VOLUME) {
+        return { level: 'unknown', reasons: [`Solo ${nf.format(total)} fichajes en el rango: muy pocos para valorar el descuadre.`] };
+    }
+
+    const gap = (a, b) => {
+        const max = Math.max(a, b);
+        return max ? (Math.abs(a - b) / max) * 100 : null;
+    };
+
+    const io = gap(row.entrada || 0, row.salida || 0);
+    const pr = gap(row.pausa || 0, row.regreso || 0);
+
+    const reasons = [];
+    if (io !== null && io >= WARN_AT) {
+        const falta = (row.entrada || 0) > (row.salida || 0) ? 'salidas' : 'entradas';
+        reasons.push(`Entradas ${nf.format(row.entrada || 0)} frente a salidas ${nf.format(row.salida || 0)}: ${io.toFixed(1)} % de diferencia. Faltan ${falta}.`);
+    }
+    if (pr !== null && pr >= WARN_AT) {
+        const falta = (row.pausa || 0) > (row.regreso || 0) ? 'regresos' : 'pausas';
+        reasons.push(`Pausas ${nf.format(row.pausa || 0)} frente a regresos ${nf.format(row.regreso || 0)}: ${pr.toFixed(1)} % de diferencia. Faltan ${falta}.`);
+    }
+
+    // Tercera señal: intensidad de fichaje por empleado. Detecta el caso que los
+    // descuadres no ven — plantilla que ficha la entrada y ya no vuelve a tocar
+    // el reloj, con entradas y salidas igual de bajas y por tanto "cuadradas".
+    let perUserLevel = 'good';
+    const perUser = row.user_days ? total / row.user_days : null;
+    if (perUser !== null && perUser < PER_USER_WARN) {
+        perUserLevel = perUser < PER_USER_CRIT ? 'critical' : 'warning';
+        reasons.push(`${perUser.toFixed(2)} fichajes por empleado y día, cuando una jornada completa son 2 como mínimo (entrada y salida). Hay jornadas sin cerrar.`);
+    }
+
+    const gapWorst = Math.max(io ?? 0, pr ?? 0);
+    const gapLevel = gapWorst >= CRIT_AT ? 'critical' : gapWorst >= WARN_AT ? 'warning' : 'good';
+
+    // Manda la peor de las señales.
+    const rank = { good: 0, warning: 1, critical: 2 };
+    const level = rank[perUserLevel] > rank[gapLevel] ? perUserLevel : gapLevel;
+
+    if (level === 'good') reasons.push('Entradas y salidas cuadran, las pausas se cierran y cada empleado ficha su jornada completa.');
+
+    return { level, reasons };
+}
+
+/** Semáforo. Color + glifo + etiqueta accesible: nunca solo el color. */
+function HealthLight({ row, onHover, onLeave }) {
+    const { level, reasons } = clockingHealth(row);
+    const cfg = HEALTH[level];
+    const text = `${cfg.label}. ${reasons.join(' ')}`;
+    return (
+        <span
+            role="img"
+            aria-label={text}
+            tabIndex={0}
+            onMouseEnter={e => onHover(e, text)}
+            onMouseMove={e => onHover(e, text)}
+            onMouseLeave={onLeave}
+            onFocus={e => onHover(e, text)}
+            onBlur={onLeave}
+            className="inline-flex items-center justify-center w-5 h-5 rounded-full text-white text-[11px] font-bold cursor-help shrink-0"
+            style={{ backgroundColor: cfg.color }}
+        >{cfg.glyph}</span>
+    );
+}
+
+
 function defaultDates() {
     const to = new Date();
     const from = new Date();
@@ -102,6 +196,14 @@ export default function FichajesByCompany() {
     const totals = data?.totals;
     const pctManual = totals?.total ? (totals.manuales / totals.total) * 100 : 0;
 
+    // Qué parte del volumen total acumula el top N. Con la cola larga que tiene
+    // esta cartera suele rondar el 17%, y saberlo evita leer el ranking como si
+    // fuera el grueso del negocio.
+    const topTotal = (data?.companies || []).reduce((a, c) => a + c.total, 0);
+    const concentration = totals?.total ? (topTotal / totals.total) * 100 : 0;
+    const showConcentration = !company
+        && (data?.company_count ?? 0) > (data?.companies?.length ?? 0);
+
     return (
         <AgentLayout>
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -164,25 +266,50 @@ export default function FichajesByCompany() {
                 {totals && (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {[
-                            ['Fichajes en el rango', nf.format(totals.total)],
-                            ['Clientes con actividad', nf.format(data.company_count ?? 0)],
-                            ['Introducidos a mano', `${pctManual.toFixed(1)} %`],
-                            ['Rango', `${data.from} → ${data.to}`],
-                        ].map(([label, value]) => (
+                            {
+                                label: 'Fichajes en el rango',
+                                value: nf.format(totals.total),
+                            },
+                            {
+                                label: 'Clientes con actividad',
+                                value: nf.format(data.company_count ?? 0),
+                            },
+                            // El dato que más sorprende: el ranking pesa mucho menos de
+                            // lo que aparenta. Se oculta cuando no hay cola que medir
+                            // (un solo cliente filtrado, o menos clientes que el top N).
+                            ...(showConcentration ? [{
+                                label: `Concentración del top ${data.limit}`,
+                                value: `${concentration.toFixed(1)} %`,
+                                hint: `el ${(100 - concentration).toFixed(1)} % restante se reparte entre ${nf.format((data.company_count ?? 0) - (data.companies?.length ?? 0))} clientes`,
+                            }] : []),
+                            {
+                                label: 'Introducidos a mano',
+                                value: `${pctManual.toFixed(1)} %`,
+                            },
+                        ].map(({ label, value, hint }) => (
                             <div key={label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
                                 <div className="text-xs text-gray-500">{label}</div>
                                 <div className="text-xl font-semibold text-gray-900 mt-1">{value}</div>
+                                {hint && <div className="text-xs text-gray-400 mt-1 leading-snug">{hint}</div>}
                             </div>
                         ))}
                     </div>
                 )}
 
                 {/* Leyenda: la identidad nunca queda solo en el color */}
-                <div className="flex flex-wrap gap-4">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                     {SERIES.map(s => (
                         <div key={s.key} className="flex items-center gap-2">
                             <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: s.color }} />
                             <span className="text-sm text-gray-600">{s.label}</span>
+                        </div>
+                    ))}
+                    <span className="hidden md:inline-block h-4 w-px bg-gray-300 mx-1" />
+                    {['good', 'warning', 'critical'].map(k => (
+                        <div key={k} className="flex items-center gap-2">
+                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold"
+                                style={{ backgroundColor: HEALTH[k].color }}>{HEALTH[k].glyph}</span>
+                            <span className="text-sm text-gray-600">{HEALTH[k].label}</span>
                         </div>
                     ))}
                 </div>
@@ -212,6 +339,9 @@ export default function FichajesByCompany() {
                                     <span className="w-24 text-right text-sm font-medium text-gray-900 tabular-nums">
                                         {nf.format(r.total)}
                                     </span>
+                                    <span className="w-5 flex justify-center">
+                                        {!r.isRest && <HealthLight row={r} onHover={onHover} onLeave={onLeave} />}
+                                    </span>
                                 </div>
                             ))}
                         </div>
@@ -228,6 +358,7 @@ export default function FichajesByCompany() {
                                         ))}
                                         <th className="px-4 py-2 text-right font-medium">Manuales</th>
                                         <th className="px-4 py-2 text-right font-medium">Total</th>
+                                        <th className="px-4 py-2 text-center font-medium">Estado</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
@@ -241,6 +372,9 @@ export default function FichajesByCompany() {
                                             ))}
                                             <td className="px-4 py-2 text-right tabular-nums text-gray-500">{nf.format(r.manuales || 0)}</td>
                                             <td className="px-4 py-2 text-right tabular-nums font-medium text-gray-900">{nf.format(r.total)}</td>
+                                            <td className="px-4 py-2 text-center">
+                                                {!r.isRest && <HealthLight row={r} onHover={onHover} onLeave={onLeave} />}
+                                            </td>
                                         </tr>
                                     ))}
                                 </tbody>

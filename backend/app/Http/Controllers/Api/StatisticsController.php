@@ -284,7 +284,8 @@ class StatisticsController extends Controller
         $companies = (clone $base)
             ->selectRaw(
                 'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan,'
-                . ' c.distributor_id, MAX(f.headcount) as headcount, MAX(f.active_users) as max_active_users, '
+                . ' c.distributor_id, MAX(f.headcount) as headcount, MAX(f.active_users) as max_active_users,'
+                . ' SUM(f.active_users) as user_days, '
                 . $select
             )
             ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
@@ -322,6 +323,9 @@ class StatisticsController extends Controller
                 'distributor_id'      => $r->distributor_id ? (int) $r->distributor_id : null,
                 'headcount'           => $r->headcount !== null ? (int) $r->headcount : null,
                 'active_users'        => (int) $r->max_active_users,
+                // Suma de empleados activos por día: la base para medir cuántos
+                // fichajes hace cada empleado en una jornada.
+                'user_days'           => (int) $r->user_days,
                 'entrada'             => (int) $r->entrada,
                 'salida'              => (int) $r->salida,
                 'pausa'               => (int) $r->pausa,
