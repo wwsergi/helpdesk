@@ -33,6 +33,19 @@ class AuthController extends Controller
             ]);
         }
 
+        // Un agente desactivado conserva sus tickets y su histórico, pero no
+        // puede entrar. Se audita como intento fallido, igual que una
+        // credencial incorrecta.
+        if ($user->active === false) {
+            if ($isTeamMember) {
+                $this->recordLogin($request, $user, 'failed');
+            }
+
+            throw ValidationException::withMessages([
+                'email' => ['Esta cuenta está desactivada. Contacta con un administrador.'],
+            ]);
+        }
+
         // Create token
         $token = $user->createToken('auth-token')->plainTextToken;
 

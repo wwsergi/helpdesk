@@ -83,10 +83,14 @@ export default function AgentInbox() {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
 
-    // Fetch agents list for assigned filter
+    // Fetch agents list for assigned filter.
+    // Incluye a los desactivados a propósito: sus tickets siguen asignados a
+    // ellos y este filtro es la forma de encontrarlos para repartirlos. Clave
+    // de caché propia para no pisar la lista de solo activos que usan los
+    // desplegables de asignación.
     const { data: agents } = useQuery({
-        queryKey: ['agents'],
-        queryFn: async () => (await apiClient.get('/agents')).data,
+        queryKey: ['agents', 'with-inactive'],
+        queryFn: async () => (await apiClient.get('/agents?include_inactive=1')).data,
     });
 
     // Fetch categories for filter
@@ -403,7 +407,7 @@ export default function AgentInbox() {
                             <option value="unassigned">Unassigned</option>
                             {agents?.map((agent) => (
                                 <option key={agent.id} value={agent.id}>
-                                    {agent.name}
+                                    {agent.name}{agent.active === false ? ' (inactivo)' : ''}
                                 </option>
                             ))}
                         </select>

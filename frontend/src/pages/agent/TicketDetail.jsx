@@ -1,6 +1,6 @@
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../lib/api';
 import FileUpload from '../../components/FileUpload';
@@ -131,6 +131,18 @@ export default function AgentTicketDetail() {
             return response.data;
         },
     });
+
+    // Si el ticket está asignado a un agente ya desactivado, éste no viene en
+    // /agents y el <select> no encontraría su opción: se vería "Unassigned" y
+    // se perdería de vista que hay alguien que debe asumirlo. Se añade a mano.
+    const assignableAgents = useMemo(() => {
+        const list = agents ?? [];
+        if (ticket?.user_id && ticket?.user && !list.some(a => a.id === ticket.user_id)) {
+            return [...list, { ...ticket.user, __inactive: true }];
+        }
+        return list;
+    }, [agents, ticket?.user_id, ticket?.user]);
+
 
     const { data: contacts } = useQuery({
         queryKey: ['contacts-search', contactSearch],
@@ -1002,9 +1014,9 @@ export default function AgentTicketDetail() {
                                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                     >
                                         <option value="">Unassigned</option>
-                                        {agents?.map((agent) => (
+                                        {assignableAgents.map((agent) => (
                                             <option key={agent.id} value={agent.id}>
-                                                {agent.name}
+                                                {agent.name}{agent.__inactive ? ' (inactivo)' : ''}
                                             </option>
                                         ))}
                                     </select>

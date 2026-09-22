@@ -90,6 +90,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/agents', [\App\Http\Controllers\Api\AgentController::class, 'store']);
         Route::patch('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'update']);
         Route::delete('/agents/{id}', [\App\Http\Controllers\Api\AgentController::class, 'destroy']);
+        Route::post('/agents/{id}/deactivate', [\App\Http\Controllers\Api\AgentController::class, 'deactivate']);
+        Route::post('/agents/{id}/activate', [\App\Http\Controllers\Api\AgentController::class, 'activate']);
         Route::get('/agents/{id}/logins', [\App\Http\Controllers\Api\AgentController::class, 'logins']);
     });
 
