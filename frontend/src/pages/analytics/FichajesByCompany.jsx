@@ -21,6 +21,47 @@ const DISTRIBUTORS = [{ id: 1, label: 'Conversia' }, { id: 2, label: 'Winworld' 
 
 const nf = new Intl.NumberFormat('es-ES');
 
+function defaultDates() {
+    const to = new Date();
+    const from = new Date();
+    from.setMonth(from.getMonth() - 3);
+    return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+}
+
+/** Barra apilada normalizada: todas miden lo mismo, solo cambia el reparto. */
+function SplitBar({ row, onHover, onLeave }) {
+    const total = SERIES.reduce((a, s) => a + (row[s.key] || 0), 0);
+    if (!total) return <div className="h-3 rounded bg-gray-100" />;
+
+    const visible = SERIES.filter(s => (row[s.key] || 0) > 0);
+
+    return (
+        <div className="flex h-3 w-full gap-[2px]">
+            {visible.map((s, i) => {
+                const pct = (row[s.key] / total) * 100;
+                const first = i === 0;
+                const last = i === visible.length - 1;
+                return (
+                    <div
+                        key={s.key}
+                        style={{
+                            width: `${pct}%`,
+                            backgroundColor: s.color,
+                            borderTopLeftRadius: first ? 4 : 0,
+                            borderBottomLeftRadius: first ? 4 : 0,
+                            borderTopRightRadius: last ? 4 : 0,
+                            borderBottomRightRadius: last ? 4 : 0,
+                        }}
+                        onMouseEnter={e => onHover(e, `${s.label}: ${nf.format(row[s.key])} (${pct.toFixed(1)} %)`)}
+                        onMouseMove={e => onHover(e, `${s.label}: ${nf.format(row[s.key])} (${pct.toFixed(1)} %)`)}
+                        onMouseLeave={onLeave}
+                    />
+                );
+            })}
+        </div>
+    );
+}
+
 export default function FichajesByCompany() {
     const { user } = useAuthStore();
     const isAdmin = user?.role === 'admin';

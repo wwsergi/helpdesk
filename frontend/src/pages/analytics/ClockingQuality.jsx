@@ -3,7 +3,8 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import apiClient from '../../lib/api';
 import AgentLayout from '../../components/agent/AgentLayout';
 import CompanyPicker from '../../components/common/CompanyPicker';
-import HealthLight, { HEALTH, HealthLegend } from '../../components/common/HealthLight';
+import HealthLight, { HealthLegend } from '../../components/common/HealthLight';
+import { HEALTH } from '../../components/common/healthStatus';
 import { useAuthStore } from '../../store/authStore';
 
 const PLANS = ['Demo', 'Basic', 'Pro'];

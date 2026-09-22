@@ -1,3 +1,5 @@
+import { HEALTH } from './healthStatus';
+
 /**
  * Semáforo de calidad de fichaje.
  *
@@ -8,12 +10,6 @@
  * Color + glifo + etiqueta accesible: la paleta de estado no llega a 3:1 sobre
  * blanco, y además así se entiende sin distinguir rojo de verde.
  */
-export const HEALTH = {
-    good:     { color: '#0ca30c', glyph: '✓', label: 'Correcto' },
-    warning:  { color: '#fab219', glyph: '!', label: 'Revisar' },
-    critical: { color: '#d03b3b', glyph: '✕', label: 'Fichaje incorrecto' },
-    unknown:  { color: '#9ca3af', glyph: '–', label: 'Sin datos suficientes' },
-};
 
 export default function HealthLight({ status, reasons = [], onHover, onLeave, size = 5 }) {
     const cfg = HEALTH[status] ?? HEALTH.unknown;

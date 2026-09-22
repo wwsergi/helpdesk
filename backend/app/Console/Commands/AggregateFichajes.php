@@ -10,8 +10,20 @@ use Illuminate\Support\Facades\Log;
 class AggregateFichajes extends Command
 {
     protected $signature = 'fichajes:aggregate
-        {--days=45 : Días hacia atrás a reagregar (modo incremental)}
-        {--full : Reagregar desde el primer registro existente (backfill completo)}';
+        {--days=365 : Días hacia atrás a reagregar (modo incremental)}
+        {--since= : Fecha de inicio explícita, YYYY-MM-DD}
+        {--full : Reagregar todo el histórico desde HISTORY_START}
+        {--auto : Modo nocturno: histórico completo si falta, y si no los últimos 365 días}';
+
+    /**
+     * Intratime arrancó en 2013; lo anterior son 3.178 filas de pruebas.
+     *
+     * 🔴 NO usar min(INOUT_DATE) para arrancar un backfill: la tabla tiene
+     * fechas corruptas y su mínimo real es 0000-06-10, o sea 740.085 días hasta
+     * hoy. Recorrerlos día a día son más de ocho años de ejecución contra la
+     * réplica. Por eso el suelo es una constante y no un dato de la tabla.
+     */
+    public const HISTORY_START = '2013-01-01';
 
     protected $description = 'Pre-agrega los fichajes de Intratime (login_logout) en las tablas locales fichaje_daily_stats (global) y fichaje_company_daily_stats (por empresa), troceando día a día para no saturar la BD origen';
 
@@ -32,14 +44,52 @@ class AggregateFichajes extends Command
         }
 
         $end = Carbon::now()->startOfDay();
-        if ($full) {
-            $min = $conn->table('login_logout')->whereNull('INOUT_DELETED_AT')->min('INOUT_DATE');
-            $start = $min ? Carbon::parse($min)->startOfDay() : $end->copy()->subYears(5);
+
+        // Modo nocturno: la primera vez reconstruye todo el histórico; a partir
+        // de ahí solo los últimos 12 meses, que es donde se mueven los datos.
+        // Se decide mirando hasta dónde llega la tabla local, así que si algún
+        // día se vacía o se queda a medias, la noche siguiente se recompone
+        // sola sin que nadie tenga que acordarse.
+        if ($this->option('auto')) {
+            $minLocal = DB::table('fichaje_company_daily_stats')->min('day');
+            $needsHistory = !$minLocal
+                || Carbon::parse($minLocal)->gt(Carbon::parse(self::HISTORY_START));
+
+            if ($needsHistory) {
+                $full = true;
+                $this->info($minLocal
+                    ? "Histórico incompleto (empieza en {$minLocal}): reconstruyendo desde " . self::HISTORY_START . '.'
+                    : 'Tabla vacía: reconstruyendo el histórico completo.');
+            } else {
+                $days = 365;
+            }
+        }
+
+        if ($since = $this->option('since')) {
+            try {
+                $start = Carbon::parse($since)->startOfDay();
+            } catch (\Throwable $e) {
+                $this->error("Fecha --since no válida: {$since}");
+                return self::FAILURE;
+            }
+        } elseif ($full) {
+            $start = Carbon::parse(self::HISTORY_START)->startOfDay();
         } else {
             $start = $end->copy()->subDays($days);
         }
 
-        $this->info(sprintf('Agregando fichajes día a día: %s → %s', $start->toDateString(), $end->toDateString()));
+        // Nunca por debajo del suelo: evita recorrer siglos de fechas corruptas.
+        $floor = Carbon::parse(self::HISTORY_START)->startOfDay();
+        if ($start->lt($floor)) {
+            $this->warn('La fecha de inicio es anterior a ' . self::HISTORY_START . '; se ajusta a ese suelo.');
+            $start = $floor;
+        }
+
+        $totalToProcess = $start->diffInDays($end) + 1;
+        $this->info(sprintf(
+            'Agregando fichajes día a día: %s → %s (%d días, ~%d min estimados)',
+            $start->toDateString(), $end->toDateString(), $totalToProcess, (int) ceil($totalToProcess * 1.1 / 60)
+        ));
 
         // Plantilla activa por empresa. Se resuelve UNA vez por ejecución (una
         // consulta de ~68k filas) en vez de por día: el valor es el de hoy, no
