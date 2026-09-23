@@ -710,6 +710,11 @@ class StatisticsController extends Controller
         $prevTo = $from->copy()->subDay()->endOfDay();
         $prevFrom = $prevTo->copy()->subDays($lengthDays - 1)->startOfDay();
 
+        // Un rango corto permite el detalle completo (índice de calidad y su
+        // comparación); uno largo se queda en lo esencial, que es lo único que
+        // la pantalla llega a mostrar.
+        $detailed = $lengthDays <= self::PREV_DETAIL_MAX_DAYS;
+
         $filtered = fn (Carbon $a, Carbon $b) => \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats as f')
             ->leftJoin('contacts as c', function ($j) use ($tenantId) {
                 $j->on('c.external_id', '=', 'f.company_external_id')
@@ -725,11 +730,16 @@ class StatisticsController extends Controller
                 // agrupar por cadenas (nombre, fecha) encarecía muchísimo la
                 // consulta — 17 s en un rango de 3 meses. Cada empresa tiene un
                 // solo contacto, así que MAX() devuelve su valor exacto.
-                'f.company_external_id,'
-                . ' MAX(c.max_users) as max_users, MAX(c.registration_date) as registration_date,'
-                . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days,'
-                . ' MAX(f.active_users) as peak_users,'
-                . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
+                'f.company_external_id, MAX(c.max_users) as max_users,'
+                // Estas cinco solo alimentan el índice de calidad, y COUNT(DISTINCT)
+                // es de lo más caro que hay aquí. En rangos largos el delta de
+                // calidad no se muestra, así que ni se piden.
+                . ($detailed
+                    ? ' MAX(c.registration_date) as registration_date,'
+                        . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days,'
+                        . ' MAX(f.active_users) as peak_users,'
+                        . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
+                    : '')
                 . ' SUM(f.clock_in) as entrada, SUM(f.clock_out) as salida,'
                 . ' SUM(f.pause) as pausa, SUM(f.return_count) as regreso,'
                 . ' SUM(f.manual_count) as manuales,'
@@ -751,7 +761,7 @@ class StatisticsController extends Controller
         // meses — para poder comparar el índice de calidad. Por encima del
         // umbral se pide una versión ligera que basta para las variaciones de
         // volumen, clientes y fuga, y el delta de calidad se omite diciéndolo.
-        $prevDetailed = $lengthDays <= self::PREV_DETAIL_MAX_DAYS;
+        $prevDetailed = $detailed;
         $prev = $prevDetailed
             ? $filtered($prevFrom, $prevTo)->get()
             : \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats as f')
@@ -842,7 +852,7 @@ class StatisticsController extends Controller
                 ? round($judged->where('status', 'good')->count() / $judged->count() * 100, 1)
                 : null;
         };
-        $quality = $qualityPct($cur, $from, $to);
+        $quality = $detailed ? $qualityPct($cur, $from, $to) : null;
         $qualityPrev = $prevDetailed ? $qualityPct($prev, $prevFrom, $prevTo) : null;
 
         $pct = fn ($a, $b) => $b > 0 ? round(($a - $b) / $b * 100, 1) : null;
