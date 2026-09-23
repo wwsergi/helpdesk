@@ -27,16 +27,17 @@ const COLUMNS = [
     { key: 'usage',    label: '% uso',              align: 'text-right', hint: 'Empleados que fichan sobre la plantilla activa' },
     { key: 'gap',      label: 'Descuadre',          align: 'text-right', hint: 'El peor de entrada/salida y pausa/regreso' },
     { key: 'per_user', label: 'Fich./empleado·día', align: 'text-right', hint: 'Una jornada completa son 2 como mínimo' },
+    { key: 'regularity', label: 'Regularidad', align: 'text-right', hint: 'Días con fichajes sobre los laborables desde su primer fichaje' },
     { key: 'status',   label: 'Estado',             align: 'text-center' },
 ];
 
 /** Reparto del semáforo sobre el total filtrado, como barra apilada. */
 function StatusBar({ summary }) {
-    const evaluable = summary.good + summary.warning + summary.critical + summary.unknown;
+    const evaluable = summary.good + summary.warning + summary.critical + (summary.new ?? 0) + summary.unknown;
     if (!evaluable) return null;
     const parts = [
         ['good', summary.good], ['warning', summary.warning],
-        ['critical', summary.critical], ['unknown', summary.unknown],
+        ['critical', summary.critical], ['new', summary.new], ['unknown', summary.unknown],
     ].filter(([, n]) => n > 0);
 
     return (
@@ -125,8 +126,10 @@ export default function ClockingQuality() {
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Calidad de fichaje</h1>
                     <p className="text-sm text-gray-500 mt-1">
-                        Todos los clientes con actividad en el rango. El semáforo cruza tres señales:
-                        entradas contra salidas, pausas contra regresos, y fichajes por empleado y día.
+                        Todos los clientes con actividad en el rango. El semáforo cruza cuatro señales:
+                        entradas contra salidas, pausas contra regresos, fichajes por empleado y día, y
+                        regularidad. Cada cliente se mide sobre <strong>su propio periodo</strong>, desde
+                        su primer fichaje, no sobre la ventana del filtro.
                     </p>
                 </div>
 
@@ -166,6 +169,7 @@ export default function ClockingQuality() {
                                 <option value="critical">Solo fichaje incorrecto</option>
                                 <option value="warning">Solo a revisar</option>
                                 <option value="good">Solo correctos</option>
+                                <option value="new">Solo recién incorporadas</option>
                                 <option value="unknown">Sin datos suficientes</option>
                             </select>
                         </div>
@@ -227,7 +231,17 @@ export default function ClockingQuality() {
                             <tbody className="divide-y divide-gray-100">
                                 {(data?.data ?? []).map(r => (
                                     <tr key={r.company_external_id} className="hover:bg-gray-50">
-                                        <td className="px-4 py-2 text-gray-800 max-w-xs truncate" title={r.name}>{r.name}</td>
+                                        <td className="px-4 py-2 text-gray-800 max-w-xs">
+                                            <span className="truncate block" title={r.name}>
+                                                {r.name}
+                                                {r.is_new && (
+                                                    <span className="ml-2 align-middle px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200"
+                                                        title={`Empezó a fichar el ${r.first_day}: lleva ${r.observed_days} días`}>
+                                                        nueva
+                                                    </span>
+                                                )}
+                                            </span>
+                                        </td>
                                         <td className="px-4 py-2 text-gray-500">{r.plan || '—'}</td>
                                         <td className="px-4 py-2 text-right tabular-nums text-gray-900">{nf.format(r.total)}</td>
                                         <td className="px-4 py-2 text-right tabular-nums text-gray-700">
@@ -240,6 +254,11 @@ export default function ClockingQuality() {
                                         </td>
                                         <td className="px-4 py-2 text-right tabular-nums text-gray-700">
                                             {r.per_user !== null ? r.per_user.toFixed(2) : <span className="text-gray-300">—</span>}
+                                        </td>
+                                        <td className="px-4 py-2 text-right tabular-nums text-gray-700">
+                                            {r.regularity !== null
+                                                ? `${r.regularity} %`
+                                                : <span className="text-gray-300" title="Necesita al menos dos semanas de recorrido">—</span>}
                                         </td>
                                         <td className="px-4 py-2 text-center">
                                             <HealthLight status={r.status} reasons={r.reasons} onHover={onHover} onLeave={onLeave} />

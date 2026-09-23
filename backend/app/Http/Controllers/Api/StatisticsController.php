@@ -287,6 +287,7 @@ class StatisticsController extends Controller
                 . ' c.distributor_id, MAX(f.headcount) as headcount, MAX(f.active_users) as peak_users,'
                 . ' SUM(f.active_users) as user_days,'
                 . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
+                . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days,'
                 . ' SUM(f.clock_in) as entrada, SUM(f.clock_out) as salida, SUM(f.pause) as pausa,'
                 . ' SUM(f.return_count) as regreso, SUM(f.manual_count) as manuales,'
                 . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total'
@@ -325,7 +326,7 @@ class StatisticsController extends Controller
             // El estado sale del mismo evaluador que usa la pantalla de calidad:
             // los umbrales viven en un único sitio y las dos pantallas no pueden
             // contradecirse.
-            'companies' => $companies->map(fn ($r) => $this->evaluateCompanyHealth($r) + [
+            'companies' => $companies->map(fn ($r) => $this->evaluateCompanyHealth($r, $to) + [
                 'user_days' => (int) $r->user_days,
                 'headcount' => $r->headcount !== null ? (int) $r->headcount : null,
             ])->all(),
@@ -356,6 +357,16 @@ class StatisticsController extends Controller
      *  se evalúa solo si tiene al menos este volumen, con lo que un 10% pasa a
      *  significar 2 fichajes o más. */
     private const MIN_PAIR_VOLUME = 20;
+
+    /** Días que una empresa lleva fichando para poder valorarla. Por debajo no
+     *  es que fiche mal: es que acaba de empezar y no hay recorrido. */
+    private const MIN_OBSERVED_DAYS = 14;
+
+    /** Regularidad = días con fichajes / días laborables desde su primer fichaje.
+     *  El 74% de la cartera pasa del 75%, así que por debajo del 25% algo falla
+     *  y por debajo del 10% directamente no lo están usando. */
+    private const REGULARITY_WARN = 0.25;
+    private const REGULARITY_CRIT = 0.10;
 
     /**
      * Calidad de fichaje de TODOS los clientes con actividad (~6.500), con los
@@ -406,12 +417,13 @@ class StatisticsController extends Controller
                 . ' SUM(f.manual_count) as manuales,'
                 . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total,'
                 . ' SUM(f.active_users) as user_days, MAX(f.active_users) as peak_users,'
-                . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla'
+                . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
+                . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days'
             )
             ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
             ->get();
 
-        $evaluated = $rows->map(fn ($r) => $this->evaluateCompanyHealth($r));
+        $evaluated = $rows->map(fn ($r) => $this->evaluateCompanyHealth($r, $to));
 
         // Resumen sobre TODAS las empresas que pasan los filtros, no solo la
         // página: si no, el reparto del semáforo cambiaría al pasar de página.
@@ -420,6 +432,7 @@ class StatisticsController extends Controller
             'good'     => $evaluated->where('status', 'good')->count(),
             'warning'  => $evaluated->where('status', 'warning')->count(),
             'critical' => $evaluated->where('status', 'critical')->count(),
+            'new'      => $evaluated->where('status', 'new')->count(),
             'unknown'  => $evaluated->where('status', 'unknown')->count(),
             'total_fichajes' => (int) $evaluated->sum('total'),
         ];
@@ -431,7 +444,7 @@ class StatisticsController extends Controller
             $evaluated = $evaluated->where('status', $request->input('status'))->values();
         }
 
-        $severity = ['unknown' => 0, 'good' => 1, 'warning' => 2, 'critical' => 3];
+        $severity = ['unknown' => 0, 'new' => 0, 'good' => 1, 'warning' => 2, 'critical' => 3];
         $sort = $request->input('sort', 'total');
         $desc = $request->input('dir', 'desc') !== 'asc';
         // Las métricas que pueden faltar (uso, intensidad, descuadre) van SIEMPRE
@@ -443,6 +456,7 @@ class StatisticsController extends Controller
                 'name'     => mb_strtolower((string) ($r['name'] ?? '')),
                 'status'   => $severity[$r['status']],
                 'usage'    => $r['usage_pct'] ?? $last,
+                'regularity' => $r['regularity'] ?? $last,
                 'per_user' => $r['per_user'] ?? $last,
                 'gap'      => ($r['gap_io'] === null && $r['gap_pr'] === null)
                     ? $last
@@ -491,7 +505,7 @@ class StatisticsController extends Controller
     }
 
     /** Aplica las tres señales a una empresa y devuelve estado + motivos. */
-    private function evaluateCompanyHealth($r): array
+    private function evaluateCompanyHealth($r, Carbon $rangeEnd): array
     {
         $entrada = (int) $r->entrada; $salida = (int) $r->salida;
         $pausa = (int) $r->pausa;     $regreso = (int) $r->regreso;
@@ -514,12 +528,50 @@ class StatisticsController extends Controller
         // Se recorta para que el indicador no mienta al alza.
         $usage = ($plantilla && $plantilla > 0) ? min(100, $peak / $plantilla * 100) : null;
 
+        // Periodo REAL de la empresa, no la ventana del filtro: desde su primer
+        // fichaje hasta el final del rango. Una empresa dada de alta este mes no
+        // puede juzgarse con la vara de una que lleva tres años.
+        $firstDay = $r->first_day ? Carbon::parse($r->first_day)->startOfDay() : null;
+        // startOfDay en ambos extremos: el rango llega con hora 23:59:59 y
+        // diffInDays devolvería un float feo (46,99999…).
+        $observedDays = $firstDay
+            ? (int) $firstDay->diffInDays($rangeEnd->copy()->startOfDay()) + 1
+            : 0;
+        $activeDays = (int) ($r->active_days ?? 0);
+
+        // Días con fichajes sobre los laborables del periodo observado. Es la
+        // señal que faltaba: la intensidad solo mira los días que ficharon, así
+        // que quien ficha dos días en tres meses sale con 2,0 y parece perfecto.
+        $workingDays = max(1, (int) round($observedDays * 5 / 7));
+        $regularity = $observedDays > 0 ? min(1, $activeDays / $workingDays) : null;
+
+        // Llevar poco tiempo NO impide valorar: es contexto, no un veredicto.
+        // Solo invalida la regularidad, que necesita recorrido para significar
+        // algo. Los descuadres y la intensidad son ratios y les basta volumen,
+        // así que una empresa con 400 fichajes en 8 días sí se puede evaluar.
+        $isNew = $observedDays > 0 && $observedDays < self::MIN_OBSERVED_DAYS;
+        if ($isNew) {
+            $regularity = null;
+        }
+
         $reasons = [];
         $status = 'good';
 
-        if ($total < self::MIN_VOLUME) {
-            $status = 'unknown';
-            $reasons[] = "Solo {$total} fichajes en el rango: muy pocos para valorar.";
+        if ($isNew) {
+            $reasons[] = sprintf(
+                'Lleva %d día%s fichando, desde el %s.',
+                $observedDays, $observedDays === 1 ? '' : 's', $firstDay->format('d/m/Y')
+            );
+        }
+
+        // Sin volumen para los descuadres y sin recorrido para la regularidad no
+        // queda nada que medir. Se distingue el porqué en vez de un genérico
+        // "sin datos": no es lo mismo acabar de empezar que llevar meses sin usarlo.
+        if ($total < self::MIN_VOLUME && $regularity === null) {
+            $status = $isNew ? 'new' : 'unknown';
+            $reasons[] = $isNew
+                ? 'Aún no hay recorrido suficiente para valorar la calidad.'
+                : "Solo {$total} fichajes en el rango: muy pocos para valorar.";
         } else {
             if ($gapIo !== null && $gapIo >= self::GAP_WARN) {
                 $falta = $entrada > $salida ? 'salidas' : 'entradas';
@@ -533,17 +585,28 @@ class StatisticsController extends Controller
                 $reasons[] = sprintf('%.2f fichajes por empleado y día, cuando una jornada completa son 2 como mínimo. Hay jornadas sin cerrar.', $perUser);
             }
 
+            $regLevel = 1;
+            if ($regularity !== null && $regularity < self::REGULARITY_WARN) {
+                $regLevel = $regularity < self::REGULARITY_CRIT ? 3 : 2;
+                $reasons[] = sprintf(
+                    'Solo ficharon %d de los ~%d días laborables desde el %s (%.0f %%). El sistema apenas se usa.',
+                    $activeDays, $workingDays, $firstDay->format('d/m/Y'), $regularity * 100
+                );
+            }
+
             $worstGap = max($gapIo ?? 0, $gapPr ?? 0);
             $gapLevel = $worstGap >= self::GAP_CRIT ? 3 : ($worstGap >= self::GAP_WARN ? 2 : 1);
             $puLevel = 1;
             if ($perUser !== null && $perUser < self::PER_USER_WARN) {
                 $puLevel = $perUser < self::PER_USER_CRIT ? 3 : 2;
             }
-            $level = max($gapLevel, $puLevel);
+            $level = max($gapLevel, $puLevel, $regLevel);
             $status = [1 => 'good', 2 => 'warning', 3 => 'critical'][$level];
 
             if ($status === 'good') {
-                $reasons[] = 'Entradas y salidas cuadran, las pausas se cierran y cada empleado ficha su jornada completa.';
+                $reasons[] = $regularity === null
+                    ? 'Entradas y salidas cuadran, las pausas se cierran y cada empleado ficha su jornada completa.'
+                    : 'Entradas y salidas cuadran, las pausas se cierran, cada empleado ficha su jornada completa y lo hacen con regularidad.';
             }
         }
 
@@ -562,6 +625,11 @@ class StatisticsController extends Controller
             'gap_io'   => $gapIo !== null ? round($gapIo, 1) : null,
             'gap_pr'   => $gapPr !== null ? round($gapPr, 1) : null,
             'per_user' => $perUser !== null ? round($perUser, 2) : null,
+            'first_day'     => $firstDay?->toDateString(),
+            'observed_days' => $observedDays,
+            'is_new'        => $isNew,
+            'active_days'   => $activeDays,
+            'regularity'    => $regularity !== null ? round($regularity * 100, 1) : null,
             'status'   => $status,
             'reasons'  => $reasons,
         ];
