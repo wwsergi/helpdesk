@@ -7,6 +7,20 @@ import HealthLight, { HealthLegend } from '../../components/common/HealthLight';
 import { HEALTH } from '../../components/common/healthStatus';
 import { useAuthStore } from '../../store/authStore';
 
+// Tramos de plan por usuarios contratados. Reflejan PLAN_TIERS del
+// StatisticsController: 142 valores distintos de max_users no caben en un
+// desplegable, y estos tramos salen del reparto real de la cartera.
+const PLAN_TIERS = [
+    { key: '1', label: '1 usuario' },
+    { key: '2-5', label: '2-5 usuarios' },
+    { key: '6-10', label: '6-10 usuarios' },
+    { key: '11-25', label: '11-25 usuarios' },
+    { key: '26-50', label: '26-50 usuarios' },
+    { key: '51-100', label: '51-100 usuarios' },
+    { key: '100+', label: 'Más de 100' },
+    { key: 'none', label: 'Sin plan' },
+];
+
 const PLANS = ['Demo', 'Basic', 'Pro'];
 // Convención de la aplicación: 1 es Conversia y 2 significa "Winworld", que
 // agrupa todo lo que no es Conversia, incluidos los contactos sin distribuidor.
@@ -77,12 +91,14 @@ export default function ClockingQuality() {
     const [distributor, setDistributor] = useState('');
     const [company, setCompany] = useState(null);
     const [status, setStatus] = useState('');
+    const [planTier, setPlanTier] = useState('');
+    const [groupBy, setGroupBy] = useState('company');
     const [sort, setSort] = useState('total');
     const [dir, setDir] = useState('desc');
     const [page, setPage] = useState(1);
     const [tip, setTip] = useState(null);
 
-    const filters = { from: dates.from, to: dates.to, plan, distributor, companyId: company?.id ?? null, status };
+    const filters = { from: dates.from, to: dates.to, plan, distributor, planTier, groupBy, companyId: company?.id ?? null, status };
 
     const { data, isFetching } = useQuery({
         queryKey: ['clocking_quality', filters, sort, dir, page],
@@ -95,6 +111,8 @@ export default function ClockingQuality() {
             if (distributor) p.set('distributor', distributor);
             if (company) p.set('contact_id', company.id);
             if (status) p.set('status', status);
+            if (planTier) p.set('plan_tier', planTier);
+            if (groupBy === 'plan') p.set('group_by', 'plan');
             return (await apiClient.get(`/statistics/fichajes-health?${p}`)).data;
         },
         enabled: isAdmin,
@@ -173,6 +191,25 @@ export default function ClockingQuality() {
                                 <option value="unknown">Sin datos suficientes</option>
                             </select>
                         </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Plan (usuarios)</label>
+                            <select value={planTier} onChange={resetting(e => setPlanTier(e.target.value))}
+                                className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                                <option value="">Todos</option>
+                                {PLAN_TIERS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Agrupar por</label>
+                            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                                {[['company', 'Empresa'], ['plan', 'Plan']].map(([v, l]) => (
+                                    <button key={v} onClick={() => { setPage?.(1); setGroupBy(v); }}
+                                        className={`px-4 py-2 text-sm font-medium transition ${groupBy === v ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                                        {l}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                         <div className="min-w-[240px]">
                             <label className="block text-xs font-medium text-gray-500 mb-1">Cliente</label>
                             <CompanyPicker value={company} onChange={resetting(setCompany)} placeholder="Todos los clientes" />
@@ -234,6 +271,9 @@ export default function ClockingQuality() {
                                         <td className="px-4 py-2 text-gray-800 max-w-xs">
                                             <span className="truncate block" title={r.name}>
                                                 {r.name}
+                                                {groupBy === 'plan' && (
+                                                    <span className="ml-2 text-xs text-gray-400">{nf.format(r.companies ?? 0)} empresas</span>
+                                                )}
                                                 {r.is_new && (
                                                     <span className="ml-2 align-middle px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200"
                                                         title={`Empezó a fichar el ${r.first_day}: lleva ${r.observed_days} días`}>

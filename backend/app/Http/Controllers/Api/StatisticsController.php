@@ -275,25 +275,58 @@ class StatisticsController extends Controller
             ->where('f.day', '<=', $to->format('Y-m-d'))
             ->when($request->filled('plan'), fn ($q) => $q->where('c.subscription_plan', $request->input('plan')))
             ->when($request->filled('distributor'), fn ($q) => $this->applyDistributorFilter($q, $request->input('distributor')))
+            ->when($request->filled('plan_tier'), fn ($q) => $this->applyPlanTierFilter($q, $request->input('plan_tier')))
             ->when($request->filled('contact_id'), fn ($q) => $q->where('c.id', (int) $request->input('contact_id')));
 
         // Una sola pasada sobre la tabla. Antes eran tres consultas (el top N,
         // los totales y el recuento de clientes) y con 5 millones de filas eso
         // se notaba: el endpoint tardaba 6,7 s. Agregando una vez y derivando
         // el resto en PHP sobre ~6.800 filas, baja a un tercio.
-        $all = $base
-            ->selectRaw(
-                'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan,'
-                . ' c.distributor_id, MAX(f.headcount) as headcount, MAX(f.active_users) as peak_users,'
-                . ' SUM(f.active_users) as user_days,'
-                . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
-                . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days,'
-                . ' SUM(f.clock_in) as entrada, SUM(f.clock_out) as salida, SUM(f.pause) as pausa,'
-                . ' SUM(f.return_count) as regreso, SUM(f.manual_count) as manuales,'
-                . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total'
-            )
-            ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
-            ->get();
+        // Se puede agrupar por empresa (por defecto) o por tramo de plan. Las
+        // métricas agregadas son las mismas, solo cambia la clave de agrupación,
+        // así que la respuesta mantiene la forma y el frontend no se entera.
+        $byPlan = $request->input('group_by') === 'plan';
+
+        $metrics = ' MAX(f.headcount) as headcount, MAX(f.active_users) as peak_users,'
+            . ' SUM(f.active_users) as user_days,'
+            . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
+            . ' SUM(COALESCE(f.active_headcount, f.headcount)) as headcount_days,'
+            . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days,'
+            . ' SUM(f.clock_in) as entrada, SUM(f.clock_out) as salida, SUM(f.pause) as pausa,'
+            . ' SUM(f.return_count) as regreso, SUM(f.manual_count) as manuales,'
+            . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total';
+
+        if ($byPlan) {
+            $tier = $this->planTierExpression();
+            $all = $base
+                ->selectRaw(
+                    "{$tier} as company_external_id, NULL as contact_id, {$tier} as name,"
+                    . ' NULL as plan, NULL as distributor_id,'
+                    . ' COUNT(DISTINCT f.company_external_id) as companies,'
+                    . $metrics
+                )
+                ->groupBy(\Illuminate\Support\Facades\DB::raw($tier))
+                ->get()
+                ->map(function ($r) {
+                    // active_days aquí es el nº de días con actividad en TODO el
+                    // tramo, no de una empresa: la regularidad no significa lo
+                    // mismo, así que se anula para no dar un dato engañoso.
+                    $r->name = $this->planTierLabel($r->name);
+                    $r->first_day = null;
+                    $r->active_days = 0;
+
+                    return $r;
+                });
+        } else {
+            $all = $base
+                ->selectRaw(
+                    'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan,'
+                    . ' c.distributor_id, 1 as companies,'
+                    . $metrics
+                )
+                ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
+                ->get();
+        }
 
         $companyCount = $all->count();
 
@@ -326,9 +359,11 @@ class StatisticsController extends Controller
             // El estado sale del mismo evaluador que usa la pantalla de calidad:
             // los umbrales viven en un único sitio y las dos pantallas no pueden
             // contradecirse.
+            'group_by'  => $byPlan ? 'plan' : 'company',
             'companies' => $companies->map(fn ($r) => $this->evaluateCompanyHealth($r, $to) + [
                 'user_days' => (int) $r->user_days,
                 'headcount' => $r->headcount !== null ? (int) $r->headcount : null,
+                'companies' => (int) ($r->companies ?? 1),
             ])->all(),
             'rest'   => $rest['total'] > 0 ? $rest : null,
             'totals' => [
@@ -399,7 +434,9 @@ class StatisticsController extends Controller
         // Una sola consulta agregada: ~6.500 empresas en ~130 ms. El semáforo se
         // calcula luego en PHP sobre ese resultado, que es más legible que
         // anidar tres subconsultas y cuesta lo mismo a este volumen.
-        $rows = \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats as f')
+        $byPlan = $request->input('group_by') === 'plan';
+
+        $base = \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats as f')
             ->leftJoin('contacts as c', function ($j) use ($tenantId) {
                 $j->on('c.external_id', '=', 'f.company_external_id')
                   ->where('c.tenant_id', '=', $tenantId);
@@ -408,22 +445,53 @@ class StatisticsController extends Controller
             ->where('f.day', '<=', $to->format('Y-m-d'))
             ->when($request->filled('plan'), fn ($q) => $q->where('c.subscription_plan', $request->input('plan')))
             ->when($request->filled('distributor'), fn ($q) => $this->applyDistributorFilter($q, $request->input('distributor')))
+            ->when($request->filled('plan_tier'), fn ($q) => $this->applyPlanTierFilter($q, $request->input('plan_tier')))
             ->when($request->filled('contact_id'), fn ($q) => $q->where('c.id', (int) $request->input('contact_id')))
-            ->when($request->filled('search'), fn ($q) => $q->where('c.name', 'like', '%' . $request->input('search') . '%'))
-            ->selectRaw(
-                'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan, c.distributor_id,'
-                . ' SUM(f.clock_in) as entrada, SUM(f.clock_out) as salida,'
-                . ' SUM(f.pause) as pausa, SUM(f.return_count) as regreso,'
-                . ' SUM(f.manual_count) as manuales,'
-                . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total,'
-                . ' SUM(f.active_users) as user_days, MAX(f.active_users) as peak_users,'
-                . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
-                . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days'
-            )
-            ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
-            ->get();
+            ->when($request->filled('search'), fn ($q) => $q->where('c.name', 'like', '%' . $request->input('search') . '%'));
 
-        $evaluated = $rows->map(fn ($r) => $this->evaluateCompanyHealth($r, $to));
+        $metrics = ' SUM(f.clock_in) as entrada, SUM(f.clock_out) as salida,'
+            . ' SUM(f.pause) as pausa, SUM(f.return_count) as regreso,'
+            . ' SUM(f.manual_count) as manuales,'
+            . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total,'
+            . ' SUM(f.active_users) as user_days, MAX(f.active_users) as peak_users,'
+            . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
+            . ' SUM(COALESCE(f.active_headcount, f.headcount)) as headcount_days,'
+            . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days';
+
+        if ($byPlan) {
+            $tier = $this->planTierExpression();
+            $rows = $base
+                ->selectRaw(
+                    "{$tier} as company_external_id, NULL as contact_id, {$tier} as name,"
+                    . ' NULL as plan, NULL as distributor_id,'
+                    . ' COUNT(DISTINCT f.company_external_id) as companies,'
+                    . $metrics
+                )
+                ->groupBy(\Illuminate\Support\Facades\DB::raw($tier))
+                ->get()
+                ->map(function ($r) {
+                    // Agregado de muchas empresas: la regularidad y el "lleva N
+                    // días" no aplican a un tramo, así que se neutralizan.
+                    $r->name = $this->planTierLabel($r->name);
+                    $r->first_day = null;
+                    $r->active_days = 0;
+
+                    return $r;
+                });
+        } else {
+            $rows = $base
+                ->selectRaw(
+                    'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan,'
+                    . ' c.distributor_id, 1 as companies,'
+                    . $metrics
+                )
+                ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
+                ->get();
+        }
+
+        $evaluated = $rows->map(fn ($r) => $this->evaluateCompanyHealth($r, $to) + [
+            'companies' => (int) ($r->companies ?? 1),
+        ]);
 
         // Resumen sobre TODAS las empresas que pasan los filtros, no solo la
         // página: si no, el reparto del semáforo cambiaría al pasar de página.
@@ -470,6 +538,7 @@ class StatisticsController extends Controller
         return response()->json([
             'from'     => $from->toDateString(),
             'to'       => $to->toDateString(),
+            'group_by' => $byPlan ? 'plan' : 'company',
             'summary'  => $summary,
             'data'     => $evaluated->forPage($page, $perPage)->values()->all(),
             'page'     => $page,
@@ -484,6 +553,74 @@ class StatisticsController extends Controller
         ]);
     }
 
+
+
+    /**
+     * Tramos de plan por número de usuarios contratados (contacts.max_users).
+     *
+     * Hay 142 valores distintos con una cola larguísima, así que un desplegable
+     * plano no sirve. Los tramos salen del reparto real entre las empresas con
+     * actividad: 1 · 2-5 · 6-10 · 11-25 · 26-50 · 51-100 · +100, que quedan
+     * equilibrados y permiten ver algo que hoy no se ve — 35 clientes de más de
+     * 100 usuarios generan cinco veces más fichajes que 1.152 de usuario único.
+     */
+    private const PLAN_TIERS = [
+        ['key' => '1',       'label' => '1 usuario',   'min' => 1,   'max' => 1],
+        ['key' => '2-5',     'label' => '2-5',         'min' => 2,   'max' => 5],
+        ['key' => '6-10',    'label' => '6-10',        'min' => 6,   'max' => 10],
+        ['key' => '11-25',   'label' => '11-25',       'min' => 11,  'max' => 25],
+        ['key' => '26-50',   'label' => '26-50',       'min' => 26,  'max' => 50],
+        ['key' => '51-100',  'label' => '51-100',      'min' => 51,  'max' => 100],
+        ['key' => '100+',    'label' => 'Más de 100',  'min' => 101, 'max' => null],
+        ['key' => 'none',    'label' => 'Sin plan',    'min' => null, 'max' => null],
+    ];
+
+    /** Expresión SQL que traduce max_users al tramo, para agrupar por plan. */
+    private function planTierExpression(): string
+    {
+        $cases = [];
+        foreach (self::PLAN_TIERS as $t) {
+            if ($t['key'] === 'none') {
+                continue;
+            }
+            $cond = $t['max'] === null
+                ? "c.max_users >= {$t['min']}"
+                : "c.max_users BETWEEN {$t['min']} AND {$t['max']}";
+            $cases[] = "WHEN {$cond} THEN '{$t['key']}'";
+        }
+
+        return 'CASE WHEN c.max_users IS NULL THEN \'none\' ' . implode(' ', $cases) . ' ELSE \'none\' END';
+    }
+
+    /** Filtra por tramo de plan. */
+    private function applyPlanTierFilter($query, string $tier)
+    {
+        foreach (self::PLAN_TIERS as $t) {
+            if ($t['key'] !== $tier) {
+                continue;
+            }
+            if ($t['key'] === 'none') {
+                return $query->whereNull('c.max_users');
+            }
+            $query->whereNotNull('c.max_users')->where('c.max_users', '>=', $t['min']);
+
+            return $t['max'] === null ? $query : $query->where('c.max_users', '<=', $t['max']);
+        }
+
+        return $query;
+    }
+
+    /** Etiqueta legible de un tramo. */
+    private function planTierLabel(?string $key): string
+    {
+        foreach (self::PLAN_TIERS as $t) {
+            if ($t['key'] === $key) {
+                return $t['label'];
+            }
+        }
+
+        return 'Sin plan';
+    }
 
     /**
      * Filtro por distribuidor, con la convención que ya usa el resto de la
@@ -524,9 +661,14 @@ class StatisticsController extends Controller
         $gapPr = $gap($pausa, $regreso);
         $perUser = $userDays ? $total / $userDays : null;
 
-        // Puede pasar del 100%: COMPANY_CURRENT_USERS se queda corto a menudo.
-        // Se recorta para que el indicador no mienta al alza.
-        $usage = ($plantilla && $plantilla > 0) ? min(100, $peak / $plantilla * 100) : null;
+        // % de uso = empleados que fichan sobre plantilla, promediado por día:
+        // user_days / headcount_days. Antes se usaba el PICO de empleados sobre
+        // la plantilla, que es optimista (mide el mejor día) y, sobre todo, deja
+        // de significar nada al agregar varias empresas en un tramo de plan, que
+        // es como se consulta ahora. Esta forma es correcta en ambos modos.
+        // Se recorta al 100%: la plantilla registrada se queda corta a menudo.
+        $headcountDays = (int) ($r->headcount_days ?? 0);
+        $usage = $headcountDays > 0 ? min(100, $userDays / $headcountDays * 100) : null;
 
         // Periodo REAL de la empresa, no la ventana del filtro: desde su primer
         // fichaje hasta el final del rango. Una empresa dada de alta este mes no

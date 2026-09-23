@@ -16,6 +16,20 @@ const SERIES = [
     { key: 'salida',  label: 'Salida',  color: '#eda100' },
 ];
 
+// Tramos de plan por usuarios contratados. Reflejan PLAN_TIERS del
+// StatisticsController: 142 valores distintos de max_users no caben en un
+// desplegable, y estos tramos salen del reparto real de la cartera.
+const PLAN_TIERS = [
+    { key: '1', label: '1 usuario' },
+    { key: '2-5', label: '2-5 usuarios' },
+    { key: '6-10', label: '6-10 usuarios' },
+    { key: '11-25', label: '11-25 usuarios' },
+    { key: '26-50', label: '26-50 usuarios' },
+    { key: '51-100', label: '51-100 usuarios' },
+    { key: '100+', label: 'Más de 100' },
+    { key: 'none', label: 'Sin plan' },
+];
+
 const PLANS = ['Demo', 'Basic', 'Pro'];
 // Convención de la aplicación: 1 es Conversia y 2 significa "Winworld", que
 // agrupa todo lo que no es Conversia, incluidos los contactos sin distribuidor.
@@ -72,16 +86,20 @@ export default function FichajesByCompany() {
     const [plan, setPlan] = useState('');
     const [distributor, setDistributor] = useState('');
     const [company, setCompany] = useState(null);
+    const [planTier, setPlanTier] = useState('');
+    const [groupBy, setGroupBy] = useState('company');
     const [view, setView] = useState('bars');
     const [tip, setTip] = useState(null);
 
     const { data, isLoading } = useQuery({
-        queryKey: ['fichajes_by_company', dates.from, dates.to, plan, distributor, company?.id ?? null],
+        queryKey: ['fichajes_by_company', dates.from, dates.to, plan, distributor, planTier, groupBy, company?.id ?? null],
         queryFn: async () => {
             const p = new URLSearchParams({ date_from: dates.from, date_to: dates.to, limit: 50 });
             if (plan) p.set('plan', plan);
             if (distributor) p.set('distributor', distributor);
             if (company) p.set('contact_id', company.id);
+            if (planTier) p.set('plan_tier', planTier);
+            if (groupBy === 'plan') p.set('group_by', 'plan');
             return (await apiClient.get(`/statistics/fichajes-by-company?${p}`)).data;
         },
         enabled: isAdmin,
@@ -110,7 +128,7 @@ export default function FichajesByCompany() {
     // fuera el grueso del negocio.
     const topTotal = (data?.companies || []).reduce((a, c) => a + c.total, 0);
     const concentration = totals?.total ? (topTotal / totals.total) * 100 : 0;
-    const showConcentration = !company
+    const showConcentration = !company && groupBy === 'company'
         && (data?.company_count ?? 0) > (data?.companies?.length ?? 0);
 
     return (
@@ -119,8 +137,9 @@ export default function FichajesByCompany() {
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Fichajes por Empresa</h1>
                     <p className="text-sm text-gray-500 mt-1">
-                        Top 50 clientes por volumen. Cada barra mide lo mismo para comparar el reparto por tipo;
-                        el volumen real está en la cifra de la derecha.
+                        {groupBy === 'plan'
+                            ? 'Agrupado por tramo de plan. Cada barra mide lo mismo para comparar el reparto por tipo; el volumen real está en la cifra de la derecha.'
+                            : 'Top 50 clientes por volumen. Cada barra mide lo mismo para comparar el reparto por tipo; el volumen real está en la cifra de la derecha.'}
                     </p>
                 </div>
 
@@ -156,6 +175,25 @@ export default function FichajesByCompany() {
                         <div className="min-w-[240px]">
                             <label className="block text-xs font-medium text-gray-500 mb-1">Cliente</label>
                             <CompanyPicker value={company} onChange={setCompany} placeholder="Todos los clientes" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Plan (usuarios)</label>
+                            <select value={planTier} onChange={e => setPlanTier(e.target.value)}
+                                className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                                <option value="">Todos</option>
+                                {PLAN_TIERS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Agrupar por</label>
+                            <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+                                {[['company', 'Empresa'], ['plan', 'Plan']].map(([v, l]) => (
+                                    <button key={v} onClick={() => { setGroupBy(v); }}
+                                        className={`px-4 py-2 text-sm font-medium transition ${groupBy === v ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                                        {l}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                         <div className="ml-auto">
                             <label className="block text-xs font-medium text-gray-500 mb-1">Vista</label>
@@ -232,9 +270,9 @@ export default function FichajesByCompany() {
                                         <div className={`text-sm truncate ${r.isRest ? 'italic text-gray-600' : 'text-gray-800'}`} title={r.name}>
                                             {r.name}
                                         </div>
-                                        {!r.isRest && r.plan && (
-                                            <span className="text-xs text-gray-400">{r.plan}</span>
-                                        )}
+                                        {!r.isRest && (groupBy === 'plan'
+                                            ? <span className="text-xs text-gray-400">{nf.format(r.companies ?? 0)} empresas</span>
+                                            : r.plan && <span className="text-xs text-gray-400">{r.plan}</span>)}
                                     </div>
                                     <div className="flex-1 min-w-[120px]">
                                         <SplitBar row={r} onHover={onHover} onLeave={onLeave} />
