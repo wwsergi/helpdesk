@@ -716,7 +716,12 @@ class StatisticsController extends Controller
             ->when($request->filled('plan_tier'), fn ($q) => $this->applyPlanTierFilter($q, $request->input('plan_tier')))
             ->when($request->filled('contact_id'), fn ($q) => $q->where('c.id', (int) $request->input('contact_id')))
             ->selectRaw(
-                'f.company_external_id, c.max_users, c.registration_date, c.name,'
+                // Las columnas del contacto van como agregados, NO en el GROUP BY:
+                // agrupar por cadenas (nombre, fecha) encarecía muchísimo la
+                // consulta — 17 s en un rango de 3 meses. Cada empresa tiene un
+                // solo contacto, así que MAX() devuelve su valor exacto.
+                'f.company_external_id,'
+                . ' MAX(c.max_users) as max_users, MAX(c.registration_date) as registration_date,'
                 . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days,'
                 . ' MAX(f.active_users) as peak_users,'
                 . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
@@ -732,7 +737,7 @@ class StatisticsController extends Controller
             )
             // Todas las columnas seleccionadas van en el GROUP BY: MariaDB no
             // deduce dependencias funcionales aunque agrupes por la clave.
-            ->groupBy('f.company_external_id', 'c.max_users', 'c.registration_date', 'c.name')
+            ->groupBy('f.company_external_id')
             ->get();
 
         $cur = $agg($from, $to);
