@@ -17,6 +17,8 @@ const SERIES = [
 ];
 
 const PLANS = ['Demo', 'Basic', 'Pro'];
+// Convención de la aplicación: 1 es Conversia y 2 significa "Winworld", que
+// agrupa todo lo que no es Conversia, incluidos los contactos sin distribuidor.
 const DISTRIBUTORS = [{ id: 1, label: 'Conversia' }, { id: 2, label: 'Winworld' }];
 
 const nf = new Intl.NumberFormat('es-ES');
@@ -78,7 +80,7 @@ export default function FichajesByCompany() {
         queryFn: async () => {
             const p = new URLSearchParams({ date_from: dates.from, date_to: dates.to, limit: 50 });
             if (plan) p.set('plan', plan);
-            if (distributor) p.set('distributor_id', distributor);
+            if (distributor) p.set('distributor', distributor);
             if (company) p.set('contact_id', company.id);
             return (await apiClient.get(`/statistics/fichajes-by-company?${p}`)).data;
         },

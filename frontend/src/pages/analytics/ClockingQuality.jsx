@@ -8,6 +8,8 @@ import { HEALTH } from '../../components/common/healthStatus';
 import { useAuthStore } from '../../store/authStore';
 
 const PLANS = ['Demo', 'Basic', 'Pro'];
+// Convención de la aplicación: 1 es Conversia y 2 significa "Winworld", que
+// agrupa todo lo que no es Conversia, incluidos los contactos sin distribuidor.
 const DISTRIBUTORS = [{ id: 1, label: 'Conversia' }, { id: 2, label: 'Winworld' }];
 const nf = new Intl.NumberFormat('es-ES');
 
@@ -89,7 +91,7 @@ export default function ClockingQuality() {
                 sort, dir, page, per_page: 50,
             });
             if (plan) p.set('plan', plan);
-            if (distributor) p.set('distributor_id', distributor);
+            if (distributor) p.set('distributor', distributor);
             if (company) p.set('contact_id', company.id);
             if (status) p.set('status', status);
             return (await apiClient.get(`/statistics/fichajes-health?${p}`)).data;

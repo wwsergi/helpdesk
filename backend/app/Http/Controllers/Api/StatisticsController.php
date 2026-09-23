@@ -274,7 +274,7 @@ class StatisticsController extends Controller
             ->where('f.day', '>=', $from->format('Y-m-d'))
             ->where('f.day', '<=', $to->format('Y-m-d'))
             ->when($request->filled('plan'), fn ($q) => $q->where('c.subscription_plan', $request->input('plan')))
-            ->when($request->filled('distributor_id'), fn ($q) => $q->where('c.distributor_id', (int) $request->input('distributor_id')))
+            ->when($request->filled('distributor'), fn ($q) => $this->applyDistributorFilter($q, $request->input('distributor')))
             ->when($request->filled('contact_id'), fn ($q) => $q->where('c.id', (int) $request->input('contact_id')));
 
         // Una sola pasada sobre la tabla. Antes eran tres consultas (el top N,
@@ -396,7 +396,7 @@ class StatisticsController extends Controller
             ->where('f.day', '>=', $from->format('Y-m-d'))
             ->where('f.day', '<=', $to->format('Y-m-d'))
             ->when($request->filled('plan'), fn ($q) => $q->where('c.subscription_plan', $request->input('plan')))
-            ->when($request->filled('distributor_id'), fn ($q) => $q->where('c.distributor_id', (int) $request->input('distributor_id')))
+            ->when($request->filled('distributor'), fn ($q) => $this->applyDistributorFilter($q, $request->input('distributor')))
             ->when($request->filled('contact_id'), fn ($q) => $q->where('c.id', (int) $request->input('contact_id')))
             ->when($request->filled('search'), fn ($q) => $q->where('c.name', 'like', '%' . $request->input('search') . '%'))
             ->selectRaw(
@@ -468,6 +468,26 @@ class StatisticsController extends Controller
                 'min_volume' => self::MIN_VOLUME,
             ],
         ]);
+    }
+
+
+    /**
+     * Filtro por distribuidor, con la convención que ya usa el resto de la
+     * aplicación (ContactController, ReportsController): el distribuidor 1 es
+     * Conversia y **Winworld es todo lo demás, incluidos los contactos sin
+     * distribuidor asignado**, que son la mayoría (44.863 de 69.403). Filtrar
+     * literalmente por distributor_id = 2 devuelve 8 contactos y parece que el
+     * filtro no funciona.
+     */
+    private function applyDistributorFilter($query, $distributor)
+    {
+        if ((string) $distributor === '2') {
+            return $query->where(function ($q) {
+                $q->where('c.distributor_id', '!=', 1)->orWhereNull('c.distributor_id');
+            });
+        }
+
+        return $query->where('c.distributor_id', (int) $distributor);
     }
 
     /** Aplica las tres señales a una empresa y devuelve estado + motivos. */
