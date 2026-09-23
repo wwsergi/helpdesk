@@ -27,10 +27,13 @@ const PLANS = ['Demo', 'Basic', 'Pro'];
 const DISTRIBUTORS = [{ id: 1, label: 'Conversia' }, { id: 2, label: 'Winworld' }];
 const nf = new Intl.NumberFormat('es-ES');
 
+// Los selectores de fecha arrancan en una semana: con 5,2 M de filas agregadas,
+// abrir una pantalla y pedir un año por defecto es lento y casi nunca es lo que
+// se quiere mirar primero. Ampliar el rango es un clic.
 function defaultDates() {
     const to = new Date();
     const from = new Date();
-    from.setMonth(from.getMonth() - 3);
+    from.setDate(from.getDate() - 7);
     return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 

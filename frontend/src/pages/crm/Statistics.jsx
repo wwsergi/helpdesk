@@ -8,6 +8,18 @@ import {
 import apiClient from '../../lib/api';
 import AgentLayout from '../../components/agent/AgentLayout';
 import CompanyPicker from '../../components/common/CompanyPicker';
+
+// Mismos tramos que PLAN_TIERS del StatisticsController.
+const PLAN_TIERS = [
+    { key: '1', label: '1 usuario' },
+    { key: '2-5', label: '2-5 usuarios' },
+    { key: '6-10', label: '6-10 usuarios' },
+    { key: '11-25', label: '11-25 usuarios' },
+    { key: '26-50', label: '26-50 usuarios' },
+    { key: '51-100', label: '51-100 usuarios' },
+    { key: '100+', label: 'Más de 100' },
+    { key: 'none', label: 'Sin plan' },
+];
 import { useAuthStore } from '../../store/authStore';
 
 const CONTRACT_LABELS = {
@@ -34,17 +46,20 @@ const FICHAJES_SERIES = [
     { key: 'regreso', label: 'Regreso', color: '#3B82F6' },
 ];
 
+// Una semana de inicio en todos los selectores de fecha. Con ese rango la
+// granularidad mensual daría un único punto, así que ambas pestañas arrancan
+// en diaria; cambiar a mensual al ampliar el rango es un clic.
 function defaultFichajeDates() {
     const to = new Date();
     const from = new Date();
-    from.setFullYear(from.getFullYear() - 1);
+    from.setDate(from.getDate() - 7);
     return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
 }
 
 function defaultRegDates() {
     const to = new Date();
     const from = new Date();
-    from.setFullYear(from.getFullYear() - 2);
+    from.setDate(from.getDate() - 7);
     return {
         from: from.toISOString().slice(0, 10),
         to: to.toISOString().slice(0, 10),
@@ -86,15 +101,16 @@ export default function Statistics() {
     };
 
     // Registrations
-    const [granularity, setGranularity] = useState('month');
+    const [granularity, setGranularity] = useState('day');
     const [regDates, setRegDates] = useState(defaultRegDates);
     const [activeSeries, setActiveSeries] = useState(['total', 'winworld', 'conversia', 'conversia22', 'leads']);
 
     // Fichajes
-    const [fichajeGranularity, setFichajeGranularity] = useState('month');
+    const [fichajeGranularity, setFichajeGranularity] = useState('day');
     const [fichajeDates, setFichajeDates] = useState(defaultFichajeDates);
     const [fichajeSource, setFichajeSource] = useState('');
     const [fichajeCompany, setFichajeCompany] = useState(null);
+    const [fichajePlanTier, setFichajePlanTier] = useState('');
     const [fichajeSeries, setFichajeSeries] = useState(['total', 'entrada', 'salida', 'pausa', 'regreso']);
 
     // Directory
@@ -118,11 +134,12 @@ export default function Statistics() {
     });
 
     const { data: fichajeData, isLoading: fichajeLoading } = useQuery({
-        queryKey: ['crm_fichajes', fichajeGranularity, fichajeDates.from, fichajeDates.to, fichajeSource, fichajeCompany?.id ?? null],
+        queryKey: ['crm_fichajes', fichajeGranularity, fichajeDates.from, fichajeDates.to, fichajeSource, fichajeCompany?.id ?? null, fichajePlanTier],
         queryFn: async () => {
             const p = new URLSearchParams({ granularity: fichajeGranularity, date_from: fichajeDates.from, date_to: fichajeDates.to });
             if (fichajeSource) p.set('source', fichajeSource);
             if (fichajeCompany) p.set('company_id', fichajeCompany.id);
+            if (fichajePlanTier) p.set('plan_tier', fichajePlanTier);
             return (await apiClient.get(`/statistics/fichajes?${p}`)).data;
         },
         enabled: isAdmin && activeTab === 'fichajes',
@@ -454,6 +471,14 @@ export default function Statistics() {
                                             <option value="">Todos</option>
                                             <option value="manual">Solo manuales</option>
                                             <option value="employee">Solo empleados</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-500 mb-1">Plan (usuarios)</label>
+                                        <select value={fichajePlanTier} onChange={e => setFichajePlanTier(e.target.value)}
+                                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                                            <option value="">Todos</option>
+                                            {PLAN_TIERS.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
                                         </select>
                                     </div>
                                     <div className="min-w-[260px]">

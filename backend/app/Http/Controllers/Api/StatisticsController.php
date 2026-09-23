@@ -154,20 +154,28 @@ class StatisticsController extends Controller
         // Filtro por empresa (opcional). Cuando llega, la serie sale de la tabla
         // desglosada por empresa en vez de la global; el formato de respuesta es
         // idéntico para que el gráfico no se entere.
+        // Con filtro de cliente o de tramo de plan la serie sale de la tabla
+        // desglosada por empresa; sin filtros se usa la global, que son 35.000
+        // filas y es instantánea. El formato de respuesta es idéntico.
         $companyId = $request->input('company_id');
-        if ($companyId) {
-            $externalId = Contact::where('tenant_id', $request->user()->tenant_id)
-                ->where('id', $companyId)
-                ->value('external_id');
+        $planTier  = $request->input('plan_tier');
 
-            // Sin external_id no hay forma de cruzar con Intratime: serie vacía,
-            // que es más honesto que devolver los totales globales.
-            if (!$externalId) {
-                return response()->json([]);
+        if ($companyId || $planTier) {
+            $externalId = null;
+            if ($companyId) {
+                $externalId = Contact::where('tenant_id', $request->user()->tenant_id)
+                    ->where('id', $companyId)
+                    ->value('external_id');
+
+                // Sin external_id no hay forma de cruzar con Intratime: serie
+                // vacía, que es más honesto que devolver los totales globales.
+                if (!$externalId) {
+                    return response()->json([]);
+                }
             }
 
-            return response()->json($this->fichajesSeriesForCompany(
-                $externalId, $from, $to, $format, $source
+            return response()->json($this->fichajesSeriesFiltered(
+                $request->user()->tenant_id, $externalId, $planTier, $from, $to, $format, $source
             ));
         }
 
@@ -201,7 +209,7 @@ class StatisticsController extends Controller
      * Serie temporal de fichajes de UNA empresa, leyendo de
      * fichaje_company_daily_stats. Devuelve el mismo formato que fichajes().
      */
-    private function fichajesSeriesForCompany(string $externalId, Carbon $from, Carbon $to, string $format, ?string $source): array
+    private function fichajesSeriesFiltered(int $tenantId, ?string $externalId, ?string $planTier, Carbon $from, Carbon $to, string $format, ?string $source): array
     {
         // Según el origen pedido se suman las columnas totales, solo las de
         // manuales, o la diferencia (lo fichado por el propio empleado).
@@ -211,16 +219,21 @@ class StatisticsController extends Controller
             default    => "SUM($total)",
         };
 
-        $rows = \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats')
-            ->where('company_external_id', $externalId)
-            ->where('day', '>=', $from->format('Y-m-d'))
-            ->where('day', '<=', $to->format('Y-m-d'))
+        $rows = \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats as f')
+            ->when($planTier, fn ($q) => $q->leftJoin('contacts as c', function ($j) use ($tenantId) {
+                $j->on('c.external_id', '=', 'f.company_external_id')
+                  ->where('c.tenant_id', '=', $tenantId);
+            }))
+            ->when($externalId, fn ($q) => $q->where('f.company_external_id', $externalId))
+            ->when($planTier, fn ($q) => $this->applyPlanTierFilter($q, $planTier))
+            ->where('f.day', '>=', $from->format('Y-m-d'))
+            ->where('f.day', '<=', $to->format('Y-m-d'))
             ->selectRaw(
-                "DATE_FORMAT(day, ?) as period, "
-                . $expr('clock_in', 'clock_in_manual') . " as entrada, "
-                . $expr('clock_out', 'clock_out_manual') . " as salida, "
-                . $expr('pause', 'pause_manual') . " as pausa, "
-                . $expr('return_count', 'return_manual') . " as regreso",
+                "DATE_FORMAT(f.day, ?) as period, "
+                . $expr('f.clock_in', 'f.clock_in_manual') . " as entrada, "
+                . $expr('f.clock_out', 'f.clock_out_manual') . " as salida, "
+                . $expr('f.pause', 'f.pause_manual') . " as pausa, "
+                . $expr('f.return_count', 'f.return_manual') . " as regreso",
                 [$format]
             )
             ->groupBy('period')
@@ -301,7 +314,7 @@ class StatisticsController extends Controller
             $all = $base
                 ->selectRaw(
                     "{$tier} as company_external_id, NULL as contact_id, {$tier} as name,"
-                    . ' NULL as plan, NULL as distributor_id,'
+                    . ' NULL as plan, NULL as distributor_id, NULL as registration_date,'
                     . ' COUNT(DISTINCT f.company_external_id) as companies,'
                     . $metrics
                 )
@@ -312,8 +325,10 @@ class StatisticsController extends Controller
                     // tramo, no de una empresa: la regularidad no significa lo
                     // mismo, así que se anula para no dar un dato engañoso.
                     $r->name = $this->planTierLabel($r->name);
-                    $r->first_day = null;
-                    $r->active_days = 0;
+                    // Un tramo agrupa muchas empresas: la regularidad y la
+                    // antigüedad no significan nada agregadas, así que se marcan
+                    // como no aplicables en vez de falsear los contadores.
+                    $r->aggregate = true;
 
                     return $r;
                 });
@@ -321,7 +336,7 @@ class StatisticsController extends Controller
             $all = $base
                 ->selectRaw(
                     'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan,'
-                    . ' c.distributor_id, 1 as companies,'
+                    . ' c.distributor_id, c.registration_date, 1 as companies,'
                     . $metrics
                 )
                 ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
@@ -360,7 +375,7 @@ class StatisticsController extends Controller
             // los umbrales viven en un único sitio y las dos pantallas no pueden
             // contradecirse.
             'group_by'  => $byPlan ? 'plan' : 'company',
-            'companies' => $companies->map(fn ($r) => $this->evaluateCompanyHealth($r, $to) + [
+            'companies' => $companies->map(fn ($r) => $this->evaluateCompanyHealth($r, $from, $to) + [
                 'user_days' => (int) $r->user_days,
                 'headcount' => $r->headcount !== null ? (int) $r->headcount : null,
                 'companies' => (int) ($r->companies ?? 1),
@@ -463,7 +478,7 @@ class StatisticsController extends Controller
             $rows = $base
                 ->selectRaw(
                     "{$tier} as company_external_id, NULL as contact_id, {$tier} as name,"
-                    . ' NULL as plan, NULL as distributor_id,'
+                    . ' NULL as plan, NULL as distributor_id, NULL as registration_date,'
                     . ' COUNT(DISTINCT f.company_external_id) as companies,'
                     . $metrics
                 )
@@ -473,8 +488,10 @@ class StatisticsController extends Controller
                     // Agregado de muchas empresas: la regularidad y el "lleva N
                     // días" no aplican a un tramo, así que se neutralizan.
                     $r->name = $this->planTierLabel($r->name);
-                    $r->first_day = null;
-                    $r->active_days = 0;
+                    // Un tramo agrupa muchas empresas: la regularidad y la
+                    // antigüedad no significan nada agregadas, así que se marcan
+                    // como no aplicables en vez de falsear los contadores.
+                    $r->aggregate = true;
 
                     return $r;
                 });
@@ -482,14 +499,14 @@ class StatisticsController extends Controller
             $rows = $base
                 ->selectRaw(
                     'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan,'
-                    . ' c.distributor_id, 1 as companies,'
+                    . ' c.distributor_id, c.registration_date, 1 as companies,'
                     . $metrics
                 )
                 ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
                 ->get();
         }
 
-        $evaluated = $rows->map(fn ($r) => $this->evaluateCompanyHealth($r, $to) + [
+        $evaluated = $rows->map(fn ($r) => $this->evaluateCompanyHealth($r, $from, $to) + [
             'companies' => (int) ($r->companies ?? 1),
         ]);
 
@@ -642,7 +659,7 @@ class StatisticsController extends Controller
     }
 
     /** Aplica las tres señales a una empresa y devuelve estado + motivos. */
-    private function evaluateCompanyHealth($r, Carbon $rangeEnd): array
+    private function evaluateCompanyHealth($r, Carbon $rangeStart, Carbon $rangeEnd): array
     {
         $entrada = (int) $r->entrada; $salida = (int) $r->salida;
         $pausa = (int) $r->pausa;     $regreso = (int) $r->regreso;
@@ -670,22 +687,36 @@ class StatisticsController extends Controller
         $headcountDays = (int) ($r->headcount_days ?? 0);
         $usage = $headcountDays > 0 ? min(100, $userDays / $headcountDays * 100) : null;
 
-        // Periodo REAL de la empresa, no la ventana del filtro: desde su primer
-        // fichaje hasta el final del rango. Una empresa dada de alta este mes no
-        // puede juzgarse con la vara de una que lleva tres años.
-        $firstDay = $r->first_day ? Carbon::parse($r->first_day)->startOfDay() : null;
-        // startOfDay en ambos extremos: el rango llega con hora 23:59:59 y
-        // diffInDays devolvería un float feo (46,99999…).
-        $observedDays = $firstDay
-            ? (int) $firstDay->diffInDays($rangeEnd->copy()->startOfDay()) + 1
+        // Antigüedad = desde su fecha de ALTA, no desde el primer fichaje del
+        // rango. Si se calculara sobre el rango, al filtrar una semana todas las
+        // empresas parecerían recién incorporadas. registration_date está
+        // informado en el 99,7% de los contactos y es exactamente el dato que
+        // distingue "acaba de darse de alta" de "lleva años y no lo usa".
+        $end = $rangeEnd->copy()->startOfDay();
+        $registered = $r->registration_date ? Carbon::parse($r->registration_date)->startOfDay() : null;
+        $observedDays = $registered && $registered->lte($end)
+            ? (int) $registered->diffInDays($end) + 1
             : 0;
+
         $activeDays = (int) ($r->active_days ?? 0);
 
-        // Días con fichajes sobre los laborables del periodo observado. Es la
-        // señal que faltaba: la intensidad solo mira los días que ficharon, así
-        // que quien ficha dos días en tres meses sale con 2,0 y parece perfecto.
-        $workingDays = max(1, (int) round($observedDays * 5 / 7));
-        $regularity = $observedDays > 0 ? min(1, $activeDays / $workingDays) : null;
+        // La regularidad se mide sobre la ventana realmente observada: el rango
+        // pedido, recortado por la fecha de alta si es posterior. Así un rango de
+        // una semana se compara contra los laborables de esa semana, y no contra
+        // los de los tres años que la empresa lleva de cliente.
+        $windowStart = $registered && $registered->gt($rangeStart)
+            ? $registered
+            : $rangeStart->copy()->startOfDay();
+        $windowDays = max(1, (int) $windowStart->diffInDays($end) + 1);
+        $workingDays = max(1, (int) round($windowDays * 5 / 7));
+
+        // Al agrupar por tramo de plan estas dos no aplican: los días activos son
+        // los del conjunto, no los de una empresa.
+        $isAggregate = (bool) ($r->aggregate ?? false);
+        $regularity = $isAggregate ? null : min(1, $activeDays / $workingDays);
+        if ($isAggregate) {
+            $observedDays = 0;
+        }
 
         // Llevar poco tiempo NO impide valorar: es contexto, no un veredicto.
         // Solo invalida la regularidad, que necesita recorrido para significar
@@ -701,8 +732,8 @@ class StatisticsController extends Controller
 
         if ($isNew) {
             $reasons[] = sprintf(
-                'Lleva %d día%s fichando, desde el %s.',
-                $observedDays, $observedDays === 1 ? '' : 's', $firstDay->format('d/m/Y')
+                'Se dio de alta hace %d día%s, el %s.',
+                $observedDays, $observedDays === 1 ? '' : 's', $registered->format('d/m/Y')
             );
         }
 
@@ -731,8 +762,8 @@ class StatisticsController extends Controller
             if ($regularity !== null && $regularity < self::REGULARITY_WARN) {
                 $regLevel = $regularity < self::REGULARITY_CRIT ? 3 : 2;
                 $reasons[] = sprintf(
-                    'Solo ficharon %d de los ~%d días laborables desde el %s (%.0f %%). El sistema apenas se usa.',
-                    $activeDays, $workingDays, $firstDay->format('d/m/Y'), $regularity * 100
+                    'Solo ficharon %d de los ~%d días laborables del periodo (%.0f %%). El sistema apenas se usa.',
+                    $activeDays, $workingDays, $regularity * 100
                 );
             }
 
@@ -767,8 +798,9 @@ class StatisticsController extends Controller
             'gap_io'   => $gapIo !== null ? round($gapIo, 1) : null,
             'gap_pr'   => $gapPr !== null ? round($gapPr, 1) : null,
             'per_user' => $perUser !== null ? round($perUser, 2) : null,
-            'first_day'     => $firstDay?->toDateString(),
+            'registered_at' => $registered?->toDateString(),
             'observed_days' => $observedDays,
+            'window_days'   => $windowDays,
             'is_new'        => $isNew,
             'active_days'   => $activeDays,
             'regularity'    => $regularity !== null ? round($regularity * 100, 1) : null,

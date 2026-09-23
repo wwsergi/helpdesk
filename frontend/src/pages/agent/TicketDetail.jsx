@@ -141,7 +141,7 @@ export default function AgentTicketDetail() {
             return [...list, { ...ticket.user, __inactive: true }];
         }
         return list;
-    }, [agents, ticket?.user_id, ticket?.user]);
+    }, [agents, ticket]);
 
 
     const { data: contacts } = useQuery({
