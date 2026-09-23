@@ -310,15 +310,20 @@ class StatisticsController extends Controller
             . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total';
 
         if ($byPlan) {
-            $tier = $this->planTierExpression();
-            $all = $base
+            // Subconsulta a propósito: MariaDB (el motor de este RDS) no reconoce
+            // que la expresión CASE del SELECT es la misma que la del GROUP BY y
+            // rechaza la consulta con ONLY_FULL_GROUP_BY. MySQL sí lo deduce, de
+            // ahí que en local pasara. Calculando el tramo dentro y agrupando
+            // por el alias fuera, funciona en los dos.
+            $all = \Illuminate\Support\Facades\DB::query()
+                ->fromSub($base->selectRaw($this->planTierExpression() . ' as tier, f.*'), 't')
                 ->selectRaw(
-                    "{$tier} as company_external_id, NULL as contact_id, {$tier} as name,"
+                    'tier as company_external_id, NULL as contact_id, tier as name,'
                     . ' NULL as plan, NULL as distributor_id, NULL as registration_date,'
-                    . ' COUNT(DISTINCT f.company_external_id) as companies,'
-                    . $metrics
+                    . ' COUNT(DISTINCT company_external_id) as companies,'
+                    . str_replace('f.', '', $metrics)
                 )
-                ->groupBy(\Illuminate\Support\Facades\DB::raw($tier))
+                ->groupBy('tier')
                 ->get()
                 ->map(function ($r) {
                     // active_days aquí es el nº de días con actividad en TODO el
@@ -474,15 +479,16 @@ class StatisticsController extends Controller
             . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days';
 
         if ($byPlan) {
-            $tier = $this->planTierExpression();
-            $rows = $base
+            // Ver la nota del ranking: subconsulta por compatibilidad con MariaDB.
+            $rows = \Illuminate\Support\Facades\DB::query()
+                ->fromSub($base->selectRaw($this->planTierExpression() . ' as tier, f.*'), 't')
                 ->selectRaw(
-                    "{$tier} as company_external_id, NULL as contact_id, {$tier} as name,"
+                    'tier as company_external_id, NULL as contact_id, tier as name,'
                     . ' NULL as plan, NULL as distributor_id, NULL as registration_date,'
-                    . ' COUNT(DISTINCT f.company_external_id) as companies,'
-                    . $metrics
+                    . ' COUNT(DISTINCT company_external_id) as companies,'
+                    . str_replace('f.', '', $metrics)
                 )
-                ->groupBy(\Illuminate\Support\Facades\DB::raw($tier))
+                ->groupBy('tier')
                 ->get()
                 ->map(function ($r) {
                     // Agregado de muchas empresas: la regularidad y el "lleva N
