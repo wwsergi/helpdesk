@@ -8,6 +8,8 @@ import {
 import apiClient from '../../lib/api';
 import AgentLayout from '../../components/agent/AgentLayout';
 import CompanyPicker from '../../components/common/CompanyPicker';
+import { KpiCard, KpiGrid } from '../../components/common/StatKpis';
+import { useFichajeKpis } from '../../components/common/useFichajeKpis';
 
 // Mismos tramos que PLAN_TIERS del StatisticsController.
 const PLAN_TIERS = [
@@ -142,6 +144,14 @@ export default function Statistics() {
             if (fichajePlanTier) p.set('plan_tier', fichajePlanTier);
             return (await apiClient.get(`/statistics/fichajes?${p}`)).data;
         },
+        enabled: isAdmin && activeTab === 'fichajes',
+    });
+
+    // KPIs de la pestaña de fichajes: en paralelo al gráfico, y solo cuando esa
+    // pestaña está visible para no pedir nada de más.
+    const { data: fichajeKpis } = useFichajeKpis({
+        from: fichajeDates.from, to: fichajeDates.to,
+        planTier: fichajePlanTier, contactId: fichajeCompany?.id ?? null,
         enabled: isAdmin && activeTab === 'fichajes',
     });
 
@@ -377,6 +387,24 @@ export default function Statistics() {
                                             className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                                     </div>
                                 </div>
+
+                                {fichajeKpis && (
+                                    <KpiGrid>
+                                        <KpiCard label="Fichajes en el rango"
+                                            value={fichajeKpis.total.toLocaleString('es-ES')}
+                                            delta={fichajeKpis.total_change_pct}
+                                            deltaTitle={`Periodo anterior (${fichajeKpis.prev_from} → ${fichajeKpis.prev_to}): ${fichajeKpis.total_prev.toLocaleString('es-ES')}`} />
+                                        <KpiCard label="Media diaria laborable"
+                                            value={fichajeKpis.daily_avg_workday !== null ? fichajeKpis.daily_avg_workday.toLocaleString('es-ES') : '—'}
+                                            hint={`sobre ${fichajeKpis.workdays} días laborables del rango`} />
+                                        <KpiCard label="Fin de semana"
+                                            value={fichajeKpis.weekend_pct !== null ? `${fichajeKpis.weekend_pct} %` : '—'}
+                                            hint={fichajeKpis.daily_avg_weekend ? `${fichajeKpis.daily_avg_weekend.toLocaleString('es-ES')} al día, frente a ${fichajeKpis.daily_avg_workday.toLocaleString('es-ES')} en laborable` : 'sin actividad en fin de semana'} />
+                                        <KpiCard label="Introducidos a mano"
+                                            value={fichajeKpis.manual_pct !== null ? `${fichajeKpis.manual_pct} %` : '—'}
+                                            hint="Fichajes corregidos a posteriori: si sube, algo falla en el día a día" />
+                                    </KpiGrid>
+                                )}
 
                                 {/* Series toggles */}
                                 <div className="flex flex-wrap gap-2">

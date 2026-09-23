@@ -664,14 +664,217 @@ class StatisticsController extends Controller
         return $query->where('c.distributor_id', (int) $distributor);
     }
 
+
+    /**
+     * KPIs de las pantallas de estadísticas.
+     *
+     * Endpoint aparte y consultado en paralelo a propósito: así la tabla o el
+     * gráfico de cada pantalla se pintan a su velocidad de siempre y los
+     * indicadores llegan cuando lleguen, sin bloquear nada.
+     *
+     * Todo sale de DOS consultas agregadas por empresa —periodo actual y
+     * anterior— en vez de una por indicador. La concentración, el reparto por
+     * tramo de plan y la fuga de clientes se derivan en PHP sobre ~6.800 filas,
+     * que es gratis comparado con volver a tocar los 5 millones.
+     */
+    public function fichajesKpis(Request $request)
+    {
+        if ($request->user()->level !== 'admin' && $request->user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $tenantId = $request->user()->tenant_id;
+
+        try {
+            $to = $request->filled('date_to') ? Carbon::parse($request->date_to)->endOfDay() : Carbon::now()->endOfDay();
+        } catch (\Throwable $e) {
+            $to = Carbon::now()->endOfDay();
+        }
+        try {
+            $from = $request->filled('date_from') ? Carbon::parse($request->date_from)->startOfDay() : $to->copy()->subDays(7)->startOfDay();
+        } catch (\Throwable $e) {
+            $from = $to->copy()->subDays(7)->startOfDay();
+        }
+        if ($from->greaterThan($to)) {
+            $from = $to->copy()->subDays(7)->startOfDay();
+        }
+
+        // El periodo anterior es uno de la misma longitud pegado justo antes,
+        // para que la comparación sea contra algo equivalente.
+        $lengthDays = max(1, (int) $from->diffInDays($to->copy()->startOfDay()) + 1);
+        $prevTo = $from->copy()->subDay()->endOfDay();
+        $prevFrom = $prevTo->copy()->subDays($lengthDays - 1)->startOfDay();
+
+        $agg = fn (Carbon $a, Carbon $b) => \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats as f')
+            ->leftJoin('contacts as c', function ($j) use ($tenantId) {
+                $j->on('c.external_id', '=', 'f.company_external_id')
+                  ->where('c.tenant_id', '=', $tenantId);
+            })
+            ->whereBetween('f.day', [$a->format('Y-m-d'), $b->format('Y-m-d')])
+            ->when($request->filled('plan'), fn ($q) => $q->where('c.subscription_plan', $request->input('plan')))
+            ->when($request->filled('distributor'), fn ($q) => $this->applyDistributorFilter($q, $request->input('distributor')))
+            ->when($request->filled('plan_tier'), fn ($q) => $this->applyPlanTierFilter($q, $request->input('plan_tier')))
+            ->when($request->filled('contact_id'), fn ($q) => $q->where('c.id', (int) $request->input('contact_id')))
+            ->selectRaw(
+                'f.company_external_id, c.max_users, c.registration_date, c.name,'
+                . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days,'
+                . ' MAX(f.active_users) as peak_users,'
+                . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
+                . ' SUM(f.clock_in) as entrada, SUM(f.clock_out) as salida,'
+                . ' SUM(f.pause) as pausa, SUM(f.return_count) as regreso,'
+                . ' SUM(f.manual_count) as manuales,'
+                . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total,'
+                . ' SUM(f.active_users) as user_days,'
+                . ' SUM(COALESCE(f.active_headcount, f.headcount)) as headcount_days,'
+                . ' SUM(CASE WHEN DAYOFWEEK(f.day) IN (1,7)'
+                . '     THEN f.clock_in + f.clock_out + f.pause + f.return_count ELSE 0 END) as findes,'
+                . ' COUNT(DISTINCT f.day) as dias'
+            )
+            // Todas las columnas seleccionadas van en el GROUP BY: MariaDB no
+            // deduce dependencias funcionales aunque agrupes por la clave.
+            ->groupBy('f.company_external_id', 'c.max_users', 'c.registration_date', 'c.name')
+            ->get();
+
+        $cur = $agg($from, $to);
+        $prev = $agg($prevFrom, $prevTo);
+
+        $sum = fn ($rows, $k) => (int) $rows->sum(fn ($r) => (int) $r->$k);
+        $curTotal = $sum($cur, 'total');
+        $prevTotal = $sum($prev, 'total');
+
+        // Días laborables reales del rango, no una estimación: normaliza la
+        // media diaria para que una semana y un trimestre sean comparables.
+        $workdays = 0;
+        for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
+            if (!$d->isWeekend()) {
+                $workdays++;
+            }
+        }
+
+        $findes = $sum($cur, 'findes');
+        $weekendDays = max(0, $lengthDays - $workdays);
+
+        // Concentración: qué parte del volumen acumulan los N mayores.
+        $totals = $cur->map(fn ($r) => (int) $r->total)->sortDesc()->values();
+        $topShare = function (int $n) use ($totals, $curTotal) {
+            if (!$curTotal || $totals->isEmpty()) {
+                return null;
+            }
+
+            return round($totals->take($n)->sum() / $curTotal * 100, 1);
+        };
+
+        // Uso de plantilla por tramo de plan: el hallazgo de que cae según crece
+        // la cuenta. Se agrupa en PHP porque los tramos ya están en memoria.
+        $tiers = [];
+        foreach (self::PLAN_TIERS as $t) {
+            $tiers[$t['key']] = ['key' => $t['key'], 'label' => $t['label'], 'user_days' => 0, 'headcount_days' => 0, 'total' => 0, 'companies' => 0];
+        }
+        foreach ($cur as $r) {
+            $key = $this->tierKeyFor($r->max_users);
+            $tiers[$key]['user_days'] += (int) $r->user_days;
+            $tiers[$key]['headcount_days'] += (int) $r->headcount_days;
+            $tiers[$key]['total'] += (int) $r->total;
+            $tiers[$key]['companies']++;
+        }
+        $usageByTier = collect($tiers)->filter(fn ($t) => $t['companies'] > 0)->map(fn ($t) => [
+            'key' => $t['key'],
+            'label' => $t['label'],
+            'companies' => $t['companies'],
+            'total' => $t['total'],
+            'usage_pct' => $t['headcount_days'] > 0
+                ? round(min(100, $t['user_days'] / $t['headcount_days'] * 100), 1)
+                : null,
+        ])->values();
+
+        // Fuga: clientes que fichaban en el periodo anterior y han dejado de
+        // hacerlo. Es una alerta, no una estadística.
+        $curIds = $cur->pluck('company_external_id')->flip();
+        $prevIds = $prev->pluck('company_external_id');
+        $stopped = $prevIds->reject(fn ($id) => $curIds->has($id))->values();
+        $started = $curIds->keys()->reject(fn ($id) => $prevIds->contains($id))->values();
+
+        // Índice de calidad de los dos periodos, con el mismo evaluador que usa la
+        // pantalla: así el porcentaje no puede discrepar del reparto que se ve
+        // justo debajo. Son ~6.800 filas ya en memoria, no otra consulta.
+        $qualityPct = function ($rows, Carbon $a, Carbon $b) {
+            $ev = $rows->map(fn ($r) => $this->evaluateCompanyHealth($r, $a, $b));
+            $judged = $ev->whereIn('status', ['good', 'warning', 'critical']);
+
+            return $judged->count() > 0
+                ? round($judged->where('status', 'good')->count() / $judged->count() * 100, 1)
+                : null;
+        };
+        $quality = $qualityPct($cur, $from, $to);
+        $qualityPrev = $qualityPct($prev, $prevFrom, $prevTo);
+
+        $pct = fn ($a, $b) => $b > 0 ? round(($a - $b) / $b * 100, 1) : null;
+
+        return response()->json([
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'prev_from' => $prevFrom->toDateString(),
+            'prev_to' => $prevTo->toDateString(),
+            'total' => $curTotal,
+            'total_prev' => $prevTotal,
+            'total_change_pct' => $pct($curTotal, $prevTotal),
+            'companies' => $cur->count(),
+            'companies_prev' => $prev->count(),
+            'companies_change_pct' => $pct($cur->count(), $prev->count()),
+            'manual_pct' => $curTotal > 0 ? round($sum($cur, 'manuales') / $curTotal * 100, 2) : null,
+            'workdays' => $workdays,
+            'weekend_days' => $weekendDays,
+            'daily_avg_workday' => $workdays > 0 ? (int) round(($curTotal - $findes) / $workdays) : null,
+            'daily_avg_weekend' => $weekendDays > 0 ? (int) round($findes / $weekendDays) : null,
+            'weekend_pct' => $curTotal > 0 ? round($findes / $curTotal * 100, 1) : null,
+            'by_type' => [
+                'entrada' => $sum($cur, 'entrada'),
+                'pausa'   => $sum($cur, 'pausa'),
+                'regreso' => $sum($cur, 'regreso'),
+                'salida'  => $sum($cur, 'salida'),
+            ],
+            'concentration' => [
+                ['n' => 10, 'pct' => $topShare(10)],
+                ['n' => 50, 'pct' => $topShare(50)],
+                ['n' => 100, 'pct' => $topShare(100)],
+                ['n' => 500, 'pct' => $topShare(500)],
+            ],
+            'usage_by_tier' => $usageByTier,
+            'quality_pct' => $quality,
+            'quality_pct_prev' => $qualityPrev,
+            'quality_change_pp' => ($quality !== null && $qualityPrev !== null)
+                ? round($quality - $qualityPrev, 1) : null,
+            'stopped_count' => $stopped->count(),
+            'started_count' => $started->count(),
+        ]);
+    }
+
+    /** Tramo de plan al que pertenece un número de usuarios contratados. */
+    private function tierKeyFor($maxUsers): string
+    {
+        if ($maxUsers === null) {
+            return 'none';
+        }
+        foreach (self::PLAN_TIERS as $t) {
+            if ($t['key'] === 'none') {
+                continue;
+            }
+            if ($maxUsers >= $t['min'] && ($t['max'] === null || $maxUsers <= $t['max'])) {
+                return $t['key'];
+            }
+        }
+
+        return 'none';
+    }
+
     /** Aplica las tres señales a una empresa y devuelve estado + motivos. */
     private function evaluateCompanyHealth($r, Carbon $rangeStart, Carbon $rangeEnd): array
     {
         $entrada = (int) $r->entrada; $salida = (int) $r->salida;
         $pausa = (int) $r->pausa;     $regreso = (int) $r->regreso;
         $total = (int) $r->total;     $userDays = (int) $r->user_days;
-        $plantilla = $r->plantilla !== null ? (int) $r->plantilla : null;
-        $peak = (int) $r->peak_users;
+        $plantilla = ($r->plantilla ?? null) !== null ? (int) $r->plantilla : null;
+        $peak = (int) ($r->peak_users ?? 0);
 
         $gap = function (int $a, int $b): ?float {
             $max = max($a, $b);
@@ -699,7 +902,7 @@ class StatisticsController extends Controller
         // informado en el 99,7% de los contactos y es exactamente el dato que
         // distingue "acaba de darse de alta" de "lleva años y no lo usa".
         $end = $rangeEnd->copy()->startOfDay();
-        $registered = $r->registration_date ? Carbon::parse($r->registration_date)->startOfDay() : null;
+        $registered = ($r->registration_date ?? null) ? Carbon::parse($r->registration_date)->startOfDay() : null;
         $observedDays = $registered && $registered->lte($end)
             ? (int) $registered->diffInDays($end) + 1
             : 0;
@@ -789,14 +992,16 @@ class StatisticsController extends Controller
             }
         }
 
+        // Los campos descriptivos son opcionales: el cálculo de KPIs reutiliza
+        // este evaluador con una consulta más ligera que no los selecciona.
         return [
             'company_external_id' => $r->company_external_id,
-            'contact_id' => $r->contact_id ? (int) $r->contact_id : null,
-            'name'       => $r->name ?: '(sin contacto sincronizado)',
-            'plan'       => $r->plan,
-            'distributor_id' => $r->distributor_id ? (int) $r->distributor_id : null,
+            'contact_id' => isset($r->contact_id) && $r->contact_id ? (int) $r->contact_id : null,
+            'name'       => ($r->name ?? null) ?: '(sin contacto sincronizado)',
+            'plan'       => $r->plan ?? null,
+            'distributor_id' => isset($r->distributor_id) && $r->distributor_id ? (int) $r->distributor_id : null,
             'entrada' => $entrada, 'salida' => $salida, 'pausa' => $pausa, 'regreso' => $regreso,
-            'manuales' => (int) $r->manuales,
+            'manuales' => (int) ($r->manuales ?? 0),
             'total' => $total,
             'active_users' => $peak,
             'plantilla' => $plantilla,

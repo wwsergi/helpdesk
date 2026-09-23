@@ -6,6 +6,8 @@ import CompanyPicker from '../../components/common/CompanyPicker';
 import HealthLight, { HealthLegend } from '../../components/common/HealthLight';
 import { HEALTH } from '../../components/common/healthStatus';
 import { useAuthStore } from '../../store/authStore';
+import { KpiCard, KpiGrid, MiniBars, StoppedAlert } from '../../components/common/StatKpis';
+import { useFichajeKpis } from '../../components/common/useFichajeKpis';
 
 // Tramos de plan por usuarios contratados. Reflejan PLAN_TIERS del
 // StatisticsController: 142 valores distintos de max_users no caben en un
@@ -122,6 +124,12 @@ export default function ClockingQuality() {
         placeholderData: keepPreviousData,
     });
 
+    // En paralelo: la tabla paginada no espera por los indicadores.
+    const { data: kpis } = useFichajeKpis({
+        from: dates.from, to: dates.to, plan, distributor, planTier,
+        contactId: company?.id ?? null, enabled: isAdmin,
+    });
+
     const onHover = (e, text) => setTip({ x: e.clientX, y: e.clientY, text });
     const onLeave = () => setTip(null);
 
@@ -222,19 +230,35 @@ export default function ClockingQuality() {
 
                 {s && (
                     <>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            {[
-                                ['Clientes con actividad', nf.format(s.clients)],
-                                ['Fichando bien', evaluable ? `${(s.good / evaluable * 100).toFixed(1)} %` : '—'],
-                                ['Requieren atención', nf.format(s.warning + s.critical)],
-                                ['Uso medio de plantilla', s.usage_avg !== null ? `${s.usage_avg} %` : '—'],
-                            ].map(([label, value]) => (
-                                <div key={label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                                    <div className="text-xs text-gray-500">{label}</div>
-                                    <div className="text-xl font-semibold text-gray-900 mt-1">{value}</div>
-                                </div>
-                            ))}
-                        </div>
+                        <KpiGrid>
+                            <KpiCard label="Clientes con actividad" value={nf.format(s.clients)}
+                                delta={kpis?.companies_change_pct}
+                                deltaTitle={kpis ? `Periodo anterior: ${nf.format(kpis.companies_prev)}` : undefined} />
+                            <KpiCard label="Fichando bien"
+                                value={evaluable ? `${(s.good / evaluable * 100).toFixed(1)} %` : '—'}
+                                delta={kpis?.quality_change_pp} deltaSuffix=" pp"
+                                deltaTitle={kpis?.quality_pct_prev !== null && kpis ? `Periodo anterior: ${kpis.quality_pct_prev} %` : undefined} />
+                            <KpiCard label="Requieren atención" value={nf.format(s.warning + s.critical)}
+                                hint={`${nf.format(s.critical)} con fichaje incorrecto`} />
+                            <KpiCard label="Uso medio de plantilla"
+                                value={s.usage_avg !== null ? `${s.usage_avg} %` : '—'}
+                                hint="Empleados que fichan sobre la plantilla contratada" />
+                            {kpis && (
+                                <StoppedAlert stopped={kpis.stopped_count} started={kpis.started_count}
+                                    prevFrom={kpis.prev_from} prevTo={kpis.prev_to} />
+                            )}
+                        </KpiGrid>
+
+                        {kpis && kpis.usage_by_tier.length > 1 && (
+                            <MiniBars
+                                title="Uso de plantilla por tamaño de plan"
+                                suffix=" %"
+                                items={kpis.usage_by_tier.map(t => ({
+                                    label: t.label, value: t.usage_pct, sub: `${nf.format(t.companies)} emp.`,
+                                }))}
+                                hint="Empleados que fichan sobre la plantilla contratada, promediado por día. Suele caer según crece la cuenta: son licencias pagadas que no se usan."
+                            />
+                        )}
 
                         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
                             <h2 className="text-sm font-semibold text-gray-700 mb-3">Reparto de la cartera</h2>

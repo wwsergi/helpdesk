@@ -4,6 +4,8 @@ import apiClient from '../../lib/api';
 import AgentLayout from '../../components/agent/AgentLayout';
 import CompanyPicker from '../../components/common/CompanyPicker';
 import { useAuthStore } from '../../store/authStore';
+import { KpiCard, KpiGrid, MiniBars, TypeSplitBar } from '../../components/common/StatKpis';
+import { useFichajeKpis } from '../../components/common/useFichajeKpis';
 import HealthLight, { HealthLegend } from '../../components/common/HealthLight';
 
 // Orden fijo, el mismo que define Intratime en clocking_types.order:
@@ -116,6 +118,12 @@ export default function FichajesByCompany() {
         return list;
     }, [data]);
 
+    // En paralelo: la tabla no espera por los indicadores.
+    const { data: kpis } = useFichajeKpis({
+        from: dates.from, to: dates.to, plan, distributor, planTier,
+        contactId: company?.id ?? null, enabled: isAdmin,
+    });
+
     const onHover = (e, text) => setTip({ x: e.clientX, y: e.clientY, text });
     const onLeave = () => setTip(null);
 
@@ -212,37 +220,39 @@ export default function FichajesByCompany() {
                     </div>
                 </div>
 
-                {/* Resumen */}
+                {/* Tarjetas: las de siempre, enriquecidas con la variación cuando
+                    llegan los KPIs (que viajan en paralelo y no bloquean la tabla). */}
                 {totals && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        {[
-                            {
-                                label: 'Fichajes en el rango',
-                                value: nf.format(totals.total),
-                            },
-                            {
-                                label: 'Clientes con actividad',
-                                value: nf.format(data.company_count ?? 0),
-                            },
-                            // El dato que más sorprende: el ranking pesa mucho menos de
-                            // lo que aparenta. Se oculta cuando no hay cola que medir
-                            // (un solo cliente filtrado, o menos clientes que el top N).
-                            ...(showConcentration ? [{
-                                label: `Concentración del top ${data.limit}`,
-                                value: `${concentration.toFixed(1)} %`,
-                                hint: `el ${(100 - concentration).toFixed(1)} % restante se reparte entre ${nf.format((data.company_count ?? 0) - (data.companies?.length ?? 0))} clientes`,
-                            }] : []),
-                            {
-                                label: 'Introducidos a mano',
-                                value: `${pctManual.toFixed(1)} %`,
-                            },
-                        ].map(({ label, value, hint }) => (
-                            <div key={label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                                <div className="text-xs text-gray-500">{label}</div>
-                                <div className="text-xl font-semibold text-gray-900 mt-1">{value}</div>
-                                {hint && <div className="text-xs text-gray-400 mt-1 leading-snug">{hint}</div>}
-                            </div>
-                        ))}
+                    <KpiGrid>
+                        <KpiCard label="Fichajes en el rango" value={nf.format(totals.total)}
+                            delta={kpis?.total_change_pct}
+                            deltaTitle={kpis ? `Periodo anterior (${kpis.prev_from} → ${kpis.prev_to}): ${nf.format(kpis.total_prev)}` : undefined} />
+                        <KpiCard label="Clientes con actividad" value={nf.format(data.company_count ?? 0)}
+                            delta={kpis?.companies_change_pct}
+                            deltaTitle={kpis ? `Periodo anterior: ${nf.format(kpis.companies_prev)}` : undefined} />
+                        {showConcentration && (
+                            <KpiCard label={`Concentración del top ${data.limit}`}
+                                value={`${concentration.toFixed(1)} %`}
+                                hint={`el ${(100 - concentration).toFixed(1)} % restante se reparte entre ${nf.format((data.company_count ?? 0) - (data.companies?.length ?? 0))} clientes`} />
+                        )}
+                        <KpiCard label="Introducidos a mano" value={`${pctManual.toFixed(1)} %`}
+                            hint="Fichajes corregidos a posteriori" />
+                        {kpis?.daily_avg_workday !== null && kpis && (
+                            <KpiCard label="Media diaria laborable" value={nf.format(kpis.daily_avg_workday)}
+                                hint={kpis.daily_avg_weekend ? `${nf.format(kpis.daily_avg_weekend)} en fin de semana (${kpis.weekend_pct} % del total)` : null} />
+                        )}
+                    </KpiGrid>
+                )}
+
+                {kpis && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <MiniBars
+                            title="Concentración del volumen"
+                            suffix=" %"
+                            items={kpis.concentration.map(c => ({ label: `Top ${c.n}`, value: c.pct }))}
+                            hint="Qué parte de los fichajes acumulan los N mayores clientes. Cuanto más plana, más peso tiene la cola larga."
+                        />
+                        <TypeSplitBar byType={kpis.by_type} series={SERIES} />
                     </div>
                 )}
 
