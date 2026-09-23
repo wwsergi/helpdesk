@@ -236,8 +236,11 @@ export default function ClockingQuality() {
                                 deltaTitle={kpis ? `Periodo anterior: ${nf.format(kpis.companies_prev)}` : undefined} />
                             <KpiCard label="Fichando bien"
                                 value={evaluable ? `${(s.good / evaluable * 100).toFixed(1)} %` : '—'}
-                                delta={kpis?.quality_change_pp} deltaSuffix=" pp"
-                                deltaTitle={kpis?.quality_pct_prev !== null && kpis ? `Periodo anterior: ${kpis.quality_pct_prev} %` : undefined} />
+                                delta={kpis?.quality_prev_available ? kpis.quality_change_pp : null} deltaSuffix=" pp"
+                                deltaTitle={kpis?.quality_prev_available ? `Periodo anterior: ${kpis.quality_pct_prev} %` : undefined}
+                                hint={kpis && !kpis.quality_prev_available
+                                    ? 'La comparación con el periodo anterior solo se calcula en rangos de hasta 45 días'
+                                    : null} />
                             <KpiCard label="Requieren atención" value={nf.format(s.warning + s.critical)}
                                 hint={`${nf.format(s.critical)} con fichaje incorrecto`} />
                             <KpiCard label="Uso medio de plantilla"

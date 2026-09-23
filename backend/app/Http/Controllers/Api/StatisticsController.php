@@ -417,6 +417,11 @@ class StatisticsController extends Controller
      *  es que fiche mal: es que acaba de empezar y no hay recorrido. */
     private const MIN_OBSERVED_DAYS = 14;
 
+    /** Hasta este tamaño de rango se agrega el periodo anterior al completo,
+     *  lo que permite comparar el índice de calidad. Por encima solo se pide lo
+     *  imprescindible: agregar dos veces un año entero costaba 52 segundos. */
+    private const PREV_DETAIL_MAX_DAYS = 45;
+
     /** Regularidad = días con fichajes / días laborables desde su primer fichaje.
      *  El 74% de la cartera pasa del 75%, así que por debajo del 25% algo falla
      *  y por debajo del 10% directamente no lo están usando. */
@@ -705,7 +710,7 @@ class StatisticsController extends Controller
         $prevTo = $from->copy()->subDay()->endOfDay();
         $prevFrom = $prevTo->copy()->subDays($lengthDays - 1)->startOfDay();
 
-        $agg = fn (Carbon $a, Carbon $b) => \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats as f')
+        $filtered = fn (Carbon $a, Carbon $b) => \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats as f')
             ->leftJoin('contacts as c', function ($j) use ($tenantId) {
                 $j->on('c.external_id', '=', 'f.company_external_id')
                   ->where('c.tenant_id', '=', $tenantId);
@@ -737,11 +742,38 @@ class StatisticsController extends Controller
             )
             // Todas las columnas seleccionadas van en el GROUP BY: MariaDB no
             // deduce dependencias funcionales aunque agrupes por la clave.
-            ->groupBy('f.company_external_id')
-            ->get();
+            ->groupBy('f.company_external_id');
 
-        $cur = $agg($from, $to);
-        $prev = $agg($prevFrom, $prevTo);
+        $cur = $filtered($from, $to)->get();
+
+        // El periodo anterior solo se agrega al completo cuando el rango es
+        // corto. En rangos largos esto duplicaba una consulta cara — 52 s a 12
+        // meses — para poder comparar el índice de calidad. Por encima del
+        // umbral se pide una versión ligera que basta para las variaciones de
+        // volumen, clientes y fuga, y el delta de calidad se omite diciéndolo.
+        $prevDetailed = $lengthDays <= self::PREV_DETAIL_MAX_DAYS;
+        $prev = $prevDetailed
+            ? $filtered($prevFrom, $prevTo)->get()
+            : \Illuminate\Support\Facades\DB::table('fichaje_company_daily_stats as f')
+                ->when(
+                    $request->filled('plan') || $request->filled('distributor')
+                        || $request->filled('plan_tier') || $request->filled('contact_id'),
+                    fn ($q) => $q->leftJoin('contacts as c', function ($j) use ($tenantId) {
+                        $j->on('c.external_id', '=', 'f.company_external_id')
+                          ->where('c.tenant_id', '=', $tenantId);
+                    })
+                )
+                ->whereBetween('f.day', [$prevFrom->format('Y-m-d'), $prevTo->format('Y-m-d')])
+                ->when($request->filled('plan'), fn ($q) => $q->where('c.subscription_plan', $request->input('plan')))
+                ->when($request->filled('distributor'), fn ($q) => $this->applyDistributorFilter($q, $request->input('distributor')))
+                ->when($request->filled('plan_tier'), fn ($q) => $this->applyPlanTierFilter($q, $request->input('plan_tier')))
+                ->when($request->filled('contact_id'), fn ($q) => $q->where('c.id', (int) $request->input('contact_id')))
+                ->selectRaw(
+                    'f.company_external_id,'
+                    . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total'
+                )
+                ->groupBy('f.company_external_id')
+                ->get();
 
         $sum = fn ($rows, $k) => (int) $rows->sum(fn ($r) => (int) $r->$k);
         $curTotal = $sum($cur, 'total');
@@ -811,7 +843,7 @@ class StatisticsController extends Controller
                 : null;
         };
         $quality = $qualityPct($cur, $from, $to);
-        $qualityPrev = $qualityPct($prev, $prevFrom, $prevTo);
+        $qualityPrev = $prevDetailed ? $qualityPct($prev, $prevFrom, $prevTo) : null;
 
         $pct = fn ($a, $b) => $b > 0 ? round(($a - $b) / $b * 100, 1) : null;
 
@@ -846,6 +878,7 @@ class StatisticsController extends Controller
             ],
             'usage_by_tier' => $usageByTier,
             'quality_pct' => $quality,
+            'quality_prev_available' => $prevDetailed,
             'quality_pct_prev' => $qualityPrev,
             'quality_change_pp' => ($quality !== null && $qualityPrev !== null)
                 ? round($quality - $qualityPrev, 1) : null,
