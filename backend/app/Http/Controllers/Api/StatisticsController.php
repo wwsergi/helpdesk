@@ -339,7 +339,7 @@ class StatisticsController extends Controller
                     . ' c.distributor_id, c.registration_date, 1 as companies,'
                     . $metrics
                 )
-                ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
+                ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id', 'c.registration_date')
                 ->get();
         }
 
@@ -502,7 +502,7 @@ class StatisticsController extends Controller
                     . ' c.distributor_id, c.registration_date, 1 as companies,'
                     . $metrics
                 )
-                ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id')
+                ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id', 'c.registration_date')
                 ->get();
         }
 
