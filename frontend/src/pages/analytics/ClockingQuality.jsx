@@ -306,7 +306,7 @@ export default function ClockingQuality() {
                                                 )}
                                                 {r.is_new && (
                                                     <span className="ml-2 align-middle px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200"
-                                                        title={`Empezó a fichar el ${r.first_day}: lleva ${r.observed_days} días`}>
+                                                        title={`Se dio de alta el ${r.registered_at}: lleva ${r.observed_days} días`}>
                                                         nueva
                                                     </span>
                                                 )}

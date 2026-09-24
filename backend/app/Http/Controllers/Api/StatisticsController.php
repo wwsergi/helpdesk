@@ -481,7 +481,7 @@ class StatisticsController extends Controller
             . ' SUM(f.active_users) as user_days, MAX(f.active_users) as peak_users,'
             . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
             . ' SUM(COALESCE(f.active_headcount, f.headcount)) as headcount_days,'
-            . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days';
+            . ' COUNT(DISTINCT f.day) as active_days';
 
         if ($byPlan) {
             // Ver la nota del ranking: subconsulta por compatibilidad con MariaDB.
