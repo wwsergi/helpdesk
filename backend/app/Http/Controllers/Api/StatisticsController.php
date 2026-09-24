@@ -304,7 +304,7 @@ class StatisticsController extends Controller
             . ' SUM(f.active_users) as user_days,'
             . ' MAX(COALESCE(f.active_headcount, f.headcount)) as plantilla,'
             . ' SUM(COALESCE(f.active_headcount, f.headcount)) as headcount_days,'
-            . ' MIN(f.day) as first_day, COUNT(DISTINCT f.day) as active_days,'
+            . ' COUNT(DISTINCT f.day) as active_days,'
             . ' SUM(f.clock_in) as entrada, SUM(f.clock_out) as salida, SUM(f.pause) as pausa,'
             . ' SUM(f.return_count) as regreso, SUM(f.manual_count) as manuales,'
             . ' SUM(f.clock_in + f.clock_out + f.pause + f.return_count) as total';
@@ -338,13 +338,17 @@ class StatisticsController extends Controller
                     return $r;
                 });
         } else {
+            // Mismo motivo que en la pantalla de calidad: agrupar por las cadenas
+            // del contacto es caro y no hace falta. Cada empresa tiene un solo
+            // contacto, así que MAX() devuelve su valor exacto.
             $all = $base
                 ->selectRaw(
-                    'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan,'
-                    . ' c.distributor_id, c.registration_date, 1 as companies,'
+                    'f.company_external_id, MAX(c.id) as contact_id, MAX(c.name) as name,'
+                    . ' MAX(c.subscription_plan) as plan, MAX(c.distributor_id) as distributor_id,'
+                    . ' MAX(c.registration_date) as registration_date, 1 as companies,'
                     . $metrics
                 )
-                ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id', 'c.registration_date')
+                ->groupBy('f.company_external_id')
                 ->get();
         }
 
