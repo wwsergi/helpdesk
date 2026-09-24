@@ -507,13 +507,19 @@ class StatisticsController extends Controller
                     return $r;
                 });
         } else {
+            // Las columnas del contacto van como agregados, NO en el GROUP BY.
+            // Agrupar por cadenas (nombre, plan, fecha de alta) es lo que costaba
+            // 17 s en los KPIs; aquí estaba el mismo patrón. Cada empresa tiene un
+            // solo contacto -- no hay external_id repetido dentro de un tenant --
+            // así que MAX() devuelve su valor exacto.
             $rows = $base
                 ->selectRaw(
-                    'f.company_external_id, c.id as contact_id, c.name, c.subscription_plan as plan,'
-                    . ' c.distributor_id, c.registration_date, 1 as companies,'
+                    'f.company_external_id, MAX(c.id) as contact_id, MAX(c.name) as name,'
+                    . ' MAX(c.subscription_plan) as plan, MAX(c.distributor_id) as distributor_id,'
+                    . ' MAX(c.registration_date) as registration_date, 1 as companies,'
                     . $metrics
                 )
-                ->groupBy('f.company_external_id', 'c.id', 'c.name', 'c.subscription_plan', 'c.distributor_id', 'c.registration_date')
+                ->groupBy('f.company_external_id')
                 ->get();
         }
 
