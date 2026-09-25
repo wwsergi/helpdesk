@@ -26,7 +26,13 @@ Schedule::command('paneladmin:sync-clients')->daily()->withoutOverlapping();
 // y unos 90 minutos; los días normales, 365, apenas 7.
 // withoutOverlapping(180) libera el cerrojo a las 3 horas, para que una
 // ejecución muerta no bloquee las noches siguientes.
-Schedule::command('fichajes:aggregate --auto')
+// --audit es TEMPORAL: mide, noche a noche, qué días ya agregados cambian de
+// verdad, para saber si la ventana de 365 días puede encogerse y qué parte del
+// histórico puede darse por congelada. Es acumulativo, así que necesita varias
+// noches seguidas para decir algo; con 2-3 semanas hay muestra de sobra.
+// 🔴 QUITARLO cuando se tome la decisión: añade una lectura de ~5.900 filas por
+// cada día reagregado y, pasado ese punto, ya no mide nada nuevo.
+Schedule::command('fichajes:aggregate --auto --audit')
     ->dailyAt('03:00')
     ->timezone('Europe/Madrid')
     ->withoutOverlapping(180);

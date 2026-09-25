@@ -13,7 +13,8 @@ class AggregateFichajes extends Command
         {--days=365 : Días hacia atrás a reagregar (modo incremental)}
         {--since= : Fecha de inicio explícita, YYYY-MM-DD}
         {--full : Reagregar todo el histórico desde HISTORY_START}
-        {--auto : Modo nocturno: histórico completo si falta, y si no los últimos 365 días}';
+        {--auto : Modo nocturno: histórico completo si falta, y si no los últimos 365 días}
+        {--audit : Antes de reescribir cada día, anota en fichaje_aggregate_audit si los datos han cambiado}';
 
     /**
      * Intratime arrancó en 2013; lo anterior son 3.178 filas de pruebas.
@@ -29,8 +30,9 @@ class AggregateFichajes extends Command
 
     public function handle(): int
     {
-        $full = (bool) $this->option('full');
-        $days = max(1, (int) $this->option('days'));
+        $full  = (bool) $this->option('full');
+        $days  = max(1, (int) $this->option('days'));
+        $audit = (bool) $this->option('audit');
 
         $conn = DB::connection('paneladmin');
         // Cada consulta cubre UN solo día (~1-2s). El cap es un seguro por si un día
@@ -116,6 +118,7 @@ class AggregateFichajes extends Command
         $totalRows = 0;
         $companyRows = 0;
         $failed = 0;
+        $changedDays = 0;
 
         for ($d = $start->copy(); $d->lte($end); $d->addDay()) {
             $dayStr   = $d->format('Y-m-d');
@@ -159,6 +162,7 @@ class AggregateFichajes extends Command
             // para no alterar el comportamiento de fichaje_daily_stats, que ya
             // está en producción. El join va contra users.USER_ID (PK) y
             // companies.COMPANY_UNIQUE_ID (único): ~1s por día.
+            $companyQueryFailed = false;
             try {
                 $byCompany = $conn->table('login_logout as ll')
                     ->join('users as u', 'u.USER_ID', '=', 'll.INOUT_USER_ID')
@@ -190,6 +194,39 @@ class AggregateFichajes extends Command
                 $this->warn("  {$dayStr} (empresas) saltado: " . $e->getMessage());
                 Log::warning("fichajes:aggregate {$dayStr} desglose por empresa falló: " . $e->getMessage());
                 $byCompany = collect();
+                $companyQueryFailed = true;
+            }
+
+            // Auditoría: comparar lo almacenado con lo que acaba de llegar, ANTES
+            // de machacarlo. Va fuera de la transacción de escritura a propósito:
+            // es una medición, y si fallara no debe tumbar la agregación.
+            // Se salta la auditoría si la consulta del día falló: $byCompany
+            // queda vacío y se registraría como "han desaparecido todas las
+            // empresas", un falso positivo que ensuciaría justo lo que se mide.
+            if ($audit && !$companyQueryFailed) {
+                try {
+                    $before = DB::table('fichaje_company_daily_stats')
+                        ->where('day', $dayStr)
+                        ->get()
+                        ->keyBy('company_external_id')
+                        ->map(fn ($r) => $this->storedSignature($r))
+                        ->all();
+
+                    $after = [];
+                    foreach ($byCompany as $r) {
+                        $after[(string) $r->company] = $this->incomingSignature($r, $activeHeadcount);
+                    }
+
+                    $diff = $this->diffDay($before, $after);
+                    if ($diff['changed']) {
+                        $changedDays++;
+                    }
+
+                    $this->recordAudit($dayStr, $diff, $now);
+                } catch (\Throwable $e) {
+                    $this->warn("  {$dayStr} auditoría falló: " . $e->getMessage());
+                    Log::warning("fichajes:aggregate {$dayStr} auditoría falló: " . $e->getMessage());
+                }
             }
 
             DB::transaction(function () use ($byCompany, $dayStr, $now, $activeHeadcount, &$companyRows) {
@@ -224,12 +261,129 @@ class AggregateFichajes extends Command
         }
 
         $msg = sprintf(
-            'fichajes:aggregate OK — %d días, %d filas globales, %d filas por empresa%s.',
-            $totalDays, $totalRows, $companyRows, $failed ? ", {$failed} días con error" : ''
+            'fichajes:aggregate OK — %d días, %d filas globales, %d filas por empresa%s%s.',
+            $totalDays, $totalRows, $companyRows,
+            $failed ? ", {$failed} días con error" : '',
+            $audit ? ", {$changedDays} de {$totalDays} días con datos distintos" : ''
         );
         $this->info($msg);
         Log::info($msg);
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Las doce columnas que el agregador escribe por empresa y día, en orden.
+     * La firma de un día es el conjunto de estas tuplas: si cambia una sola
+     * cifra, cambia la firma. Los nulos se marcan con 'n' para distinguir
+     * "sin plantilla registrada" de "plantilla cero", que no es lo mismo.
+     */
+    private function signature(array $v): string
+    {
+        return implode(',', array_map(
+            fn ($x) => $x === null ? 'n' : (string) (int) $x,
+            $v
+        ));
+    }
+
+    /** Firma de una fila ya almacenada en fichaje_company_daily_stats. */
+    private function storedSignature($r): string
+    {
+        return $this->signature([
+            $r->clock_in, $r->clock_out, $r->pause, $r->return_count,
+            $r->clock_in_manual, $r->clock_out_manual, $r->pause_manual, $r->return_manual,
+            $r->manual_count, $r->active_users, $r->headcount, $r->active_headcount,
+        ]);
+    }
+
+    /**
+     * Firma de una fila recién traída de Intratime. Tiene que construirse con
+     * EXACTAMENTE las mismas conversiones que hace el insert de más abajo
+     * (casts a int, active_headcount desde el mapa de plantilla), o la
+     * comparación marcaría como cambiados días que solo difieren en el tipo.
+     */
+    private function incomingSignature($r, array $activeHeadcount): string
+    {
+        return $this->signature([
+            (int) $r->clock_in, (int) $r->clock_out, (int) $r->pause, (int) $r->return_count,
+            (int) $r->clock_in_manual, (int) $r->clock_out_manual,
+            (int) $r->pause_manual, (int) $r->return_manual,
+            (int) $r->manual_count, (int) $r->active_users,
+            $r->headcount !== null ? (int) $r->headcount : null,
+            $activeHeadcount[(string) $r->company] ?? null,
+        ]);
+    }
+
+    /**
+     * Anota el resultado de auditar un día. ACUMULATIVO a propósito: una sola
+     * pasada no responde nada, porque el nocturno reagrega estos mismos días
+     * cada noche y por tanto compara contra lo de anoche. La pregunta —hasta
+     * dónde atrás se mueven los datos— se contesta dejándolo varias noches y
+     * mirando times_changed y last_changed_at.
+     */
+    private function recordAudit(string $dayStr, array $diff, Carbon $now): void
+    {
+        $prev = DB::table('fichaje_aggregate_audit')->where('day', $dayStr)->first();
+
+        DB::table('fichaje_aggregate_audit')->updateOrInsert(
+            ['day' => $dayStr],
+            [
+                'times_checked'     => ($prev->times_checked ?? 0) + 1,
+                'times_changed'     => ($prev->times_changed ?? 0) + ($diff['changed'] ? 1 : 0),
+                'first_checked_at'  => $prev->first_checked_at ?? $now,
+                'last_checked_at'   => $now,
+                'last_changed_at'   => $diff['changed'] ? $now : ($prev->last_changed_at ?? null),
+                'changed_last'      => $diff['changed'],
+                'companies_before'  => $diff['companies_before'],
+                'companies_after'   => $diff['companies_after'],
+                'companies_added'   => $diff['companies_added'],
+                'companies_removed' => $diff['companies_removed'],
+                'companies_changed' => $diff['companies_changed'],
+                'total_before'      => $diff['total_before'],
+                'total_after'       => $diff['total_after'],
+            ]
+        );
+    }
+
+    /**
+     * Compara las firmas de un día — antes contra después — y devuelve las
+     * columnas de fichaje_aggregate_audit. Función pura: recibe dos mapas
+     * empresa => firma y no toca nada.
+     */
+    private function diffDay(array $before, array $after): array
+    {
+        $added   = array_diff_key($after, $before);
+        $removed = array_diff_key($before, $after);
+
+        $changed = 0;
+        foreach (array_intersect_key($after, $before) as $company => $sig) {
+            if ($sig !== $before[$company]) {
+                $changed++;
+            }
+        }
+
+        // El total del día son las cuatro primeras cifras de cada firma: las
+        // marcas reales (entrada, salida, pausa, regreso), sin los desgloses
+        // de manuales, que ya van incluidos dentro de esas cuatro.
+        $volume = function (array $sigs): int {
+            $t = 0;
+            foreach ($sigs as $sig) {
+                $p = explode(',', $sig);
+                $t += (int) $p[0] + (int) $p[1] + (int) $p[2] + (int) $p[3];
+            }
+
+            return $t;
+        };
+
+        return [
+            'companies_before'  => count($before),
+            'companies_after'   => count($after),
+            'companies_added'   => count($added),
+            'companies_removed' => count($removed),
+            'companies_changed' => $changed,
+            'total_before'      => $volume($before),
+            'total_after'       => $volume($after),
+            'changed'           => count($added) > 0 || count($removed) > 0 || $changed > 0,
+        ];
     }
 }
