@@ -162,7 +162,6 @@ class AggregateFichajes extends Command
             // para no alterar el comportamiento de fichaje_daily_stats, que ya
             // está en producción. El join va contra users.USER_ID (PK) y
             // companies.COMPANY_UNIQUE_ID (único): ~1s por día.
-            $companyQueryFailed = false;
             try {
                 $byCompany = $conn->table('login_logout as ll')
                     ->join('users as u', 'u.USER_ID', '=', 'll.INOUT_USER_ID')
@@ -190,20 +189,26 @@ class AggregateFichajes extends Command
                     ->groupBy('u.USER_COMPANY')
                     ->get();
             } catch (\Throwable $e) {
+                // 🔴 continue, NO seguir con $byCompany vacío. La escritura de
+                // más abajo borra el día antes de insertar, así que caer aquí
+                // con una colección vacía BORRABA el desglose del día y lo
+                // dejaba en blanco hasta la noche siguiente — y el mensaje
+                // decía "saltado", con lo que no había forma de enterarse.
+                // El caso no es teórico: la consulta global es un COUNT sobre
+                // una tabla indexada y esta es un join a tres bandas con el
+                // tope de 30 s, así que es justo la que puede reventar sola.
+                // Saltando, el día conserva lo que ya tenía (dato de ayer, no
+                // un agujero) y la noche siguiente vuelve a intentarlo.
                 $failed++;
-                $this->warn("  {$dayStr} (empresas) saltado: " . $e->getMessage());
-                Log::warning("fichajes:aggregate {$dayStr} desglose por empresa falló: " . $e->getMessage());
-                $byCompany = collect();
-                $companyQueryFailed = true;
+                $this->warn("  {$dayStr} (empresas) saltado, se conserva lo anterior: " . $e->getMessage());
+                Log::warning("fichajes:aggregate {$dayStr} desglose por empresa falló, día conservado: " . $e->getMessage());
+                continue;
             }
 
             // Auditoría: comparar lo almacenado con lo que acaba de llegar, ANTES
             // de machacarlo. Va fuera de la transacción de escritura a propósito:
             // es una medición, y si fallara no debe tumbar la agregación.
-            // Se salta la auditoría si la consulta del día falló: $byCompany
-            // queda vacío y se registraría como "han desaparecido todas las
-            // empresas", un falso positivo que ensuciaría justo lo que se mide.
-            if ($audit && !$companyQueryFailed) {
+            if ($audit) {
                 try {
                     $before = DB::table('fichaje_company_daily_stats')
                         ->where('day', $dayStr)
