@@ -20,6 +20,9 @@ class AttachmentController extends Controller
         'image/png',
         'image/gif',
         'image/svg+xml',
+        'image/webp',
+        'image/bmp',
+        'image/tiff',
         // Documents
         'application/pdf',
         'application/msword', // .doc
@@ -34,9 +37,16 @@ class AttachmentController extends Controller
         // Archives
         'application/zip',
         'application/x-zip-compressed',
+        'application/octet-stream', // fallback when browser/PHP can't determine MIME for Office files
     ];
 
-    private const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    private const ALLOWED_EXTENSIONS = [
+        'jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp', 'tif', 'tiff',
+        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+        'txt', 'csv', 'zip',
+    ];
+
+    private const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 
     /**
      * Upload a file
@@ -44,22 +54,27 @@ class AttachmentController extends Controller
     public function upload(Request $request)
     {
         $request->validate([
-            'file' => 'required|file|max:10240', // 10MB in KB
+            'file' => 'required|file|max:25600', // 25MB in KB
         ]);
 
         $file = $request->file('file');
 
-        // Validate file type
-        if (!in_array($file->getMimeType(), self::ALLOWED_MIME_TYPES)) {
+        // Validate file type by MIME OR extension (browsers sometimes report
+        // application/octet-stream for valid Office documents)
+        $mime = $file->getMimeType();
+        $ext = strtolower($file->getClientOriginalExtension());
+        $mimeOk = in_array($mime, self::ALLOWED_MIME_TYPES, true);
+        $extOk = in_array($ext, self::ALLOWED_EXTENSIONS, true);
+        if (!$mimeOk && !$extOk) {
             return response()->json([
-                'message' => 'File type not allowed. Allowed types: images, PDFs, documents, text files, and ZIP archives.'
+                'message' => 'Tipo de archivo no permitido. Se aceptan imágenes, PDFs, documentos Office, texto y ZIP.'
             ], 422);
         }
 
         // Validate file size
         if ($file->getSize() > self::MAX_FILE_SIZE) {
             return response()->json([
-                'message' => 'File size exceeds 10MB limit.'
+                'message' => 'El archivo supera el límite de 25MB.'
             ], 422);
         }
 

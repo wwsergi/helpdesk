@@ -24,11 +24,18 @@ class User extends Authenticatable
         'password',
         'role',
         'level',
+        'active',
     ];
 
     public function tenant()
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    /** Tickets asignados a este agente. */
+    public function tickets()
+    {
+        return $this->hasMany(Ticket::class);
     }
 
     /**
@@ -51,6 +58,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'active' => 'boolean',
         ];
     }
 }

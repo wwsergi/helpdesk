@@ -5,6 +5,35 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../lib/api';
 import AgentLayout from '../../components/agent/AgentLayout';
 
+const CLOSED = ['RESOLVED', 'CLOSED'];
+
+const fmtDateTime = (str) => {
+    if (!str) return '—';
+    return new Date(str).toLocaleString('es-ES', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+    });
+};
+
+// Light user-agent summary (browser + OS) for readability; full string on hover.
+const summarizeUA = (ua) => {
+    if (!ua) return 'Desconocido';
+    let browser = 'Navegador';
+    if (/edg/i.test(ua)) browser = 'Edge';
+    else if (/chrome|crios/i.test(ua)) browser = 'Chrome';
+    else if (/firefox|fxios/i.test(ua)) browser = 'Firefox';
+    else if (/safari/i.test(ua)) browser = 'Safari';
+
+    let os = '';
+    if (/windows/i.test(ua)) os = 'Windows';
+    else if (/iphone|ipad|ios/i.test(ua)) os = 'iOS';
+    else if (/mac os/i.test(ua)) os = 'macOS';
+    else if (/android/i.test(ua)) os = 'Android';
+    else if (/linux/i.test(ua)) os = 'Linux';
+
+    return os ? `${browser} · ${os}` : browser;
+};
+
 export default function Agents() {
     const { user: currentUser, logout } = useAuthStore();
     const [searchQuery, setSearchQuery] = useState('');
@@ -19,13 +48,31 @@ export default function Agents() {
         level: '',
     });
     const [error, setError] = useState(null);
+    const [loginsAgent, setLoginsAgent] = useState(null);
+    const [loginsPage, setLoginsPage] = useState(1);
 
     const queryClient = useQueryClient();
 
-    const { data: agents, isLoading } = useQuery({
-        queryKey: ['agents', searchQuery],
+    const { data: loginsData, isLoading: loginsLoading } = useQuery({
+        queryKey: ['agent-logins', loginsAgent?.id, loginsPage],
         queryFn: async () => {
-            const response = await apiClient.get(`/agents?search=${searchQuery}`);
+            const response = await apiClient.get(`/agents/${loginsAgent.id}/logins?page=${loginsPage}`);
+            return response.data;
+        },
+        enabled: !!loginsAgent,
+    });
+
+    const openLogins = (agent) => {
+        setLoginsAgent(agent);
+        setLoginsPage(1);
+    };
+
+    const { data: agents, isLoading } = useQuery({
+        queryKey: ['agents', 'manage', searchQuery],
+        queryFn: async () => {
+            // include_inactive: esta es la pantalla donde se gestionan, así que
+            // aquí sí deben verse los desactivados para poder reactivarlos.
+            const response = await apiClient.get(`/agents?include_inactive=1&search=${searchQuery}`);
             return response.data;
         },
     });
@@ -56,6 +103,33 @@ export default function Agents() {
         onError: (err) => {
             setError(err.response?.data?.message || 'Failed to update agent');
         },
+    });
+
+    // Desactivación: el agente deja de entrar y de aparecer en los desplegables,
+    // pero conserva sus tickets para no perder la trazabilidad. Opcionalmente se
+    // reasignan los abiertos en el mismo paso.
+    const [deactivating, setDeactivating] = useState(null);
+    const [reassignTo, setReassignTo] = useState('');
+
+    const deactivateMutation = useMutation({
+        mutationFn: async ({ id, reassign_to }) =>
+            (await apiClient.post(`/agents/${id}/deactivate`, reassign_to ? { reassign_to: Number(reassign_to) } : {})).data,
+        onSuccess: (res) => {
+            queryClient.invalidateQueries({ queryKey: ['agents'] });
+            queryClient.invalidateQueries({ queryKey: ['tickets'] });
+            setDeactivating(null);
+            setReassignTo('');
+            if (res.reassigned > 0) {
+                alert(`Agente desactivado. ${res.reassigned} ticket(s) reasignado(s) a ${res.reassigned_to}.`);
+            }
+        },
+        onError: (err) => alert(err.response?.data?.message || 'No se pudo desactivar el agente'),
+    });
+
+    const activateMutation = useMutation({
+        mutationFn: async (id) => (await apiClient.post(`/agents/${id}/activate`)).data,
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agents'] }),
+        onError: (err) => alert(err.response?.data?.message || 'No se pudo reactivar el agente'),
     });
 
     const deleteMutation = useMutation({
@@ -174,13 +248,14 @@ export default function Agents() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Level</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan="5" className="px-6 py-4 text-center">
+                                    <td colSpan="6" className="px-6 py-4 text-center">
                                         <div className="flex justify-center">
                                             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
                                         </div>
@@ -188,13 +263,13 @@ export default function Agents() {
                                 </tr>
                             ) : agents?.length === 0 ? (
                                 <tr>
-                                    <td colSpan="5" className="px-6 py-12 text-center text-gray-500">
+                                    <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                                         No agents found
                                     </td>
                                 </tr>
                             ) : (
                                 agents.map((agent) => (
-                                    <tr key={agent.id} className="hover:bg-gray-50 transition">
+                                    <tr key={agent.id} className={`hover:bg-gray-50 transition ${agent.active === false ? 'bg-gray-50/60' : ''}`}>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center">
                                                 <div className="h-8 w-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-xs mr-3">
@@ -218,20 +293,58 @@ export default function Agents() {
                                                 <span className="text-gray-400 text-xs">—</span>
                                             )}
                                         </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {agent.active === false ? (
+                                                <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-200 text-gray-600">Inactivo</span>
+                                            ) : (
+                                                <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-emerald-100 text-emerald-800">Activo</span>
+                                            )}
+                                            {agent.open_tickets_count > 0 && (
+                                                <span className="ml-2 text-xs text-gray-400">{agent.open_tickets_count} abiertos</span>
+                                            )}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <button
+                                                onClick={() => openLogins(agent)}
+                                                className="text-gray-600 hover:text-gray-900 mr-4"
+                                            >
+                                                Accesos
+                                            </button>
                                             <button
                                                 onClick={() => handleEdit(agent)}
                                                 className="text-primary-600 hover:text-primary-900 mr-4"
                                             >
                                                 Edit
                                             </button>
-                                            <button
-                                                onClick={() => handleDelete(agent.id)}
-                                                className={`text-red-600 hover:text-red-900 ${agent.id === currentUser.id ? 'opacity-30 cursor-not-allowed' : ''}`}
-                                                disabled={agent.id === currentUser.id}
-                                            >
-                                                Delete
-                                            </button>
+                                            {agent.active === false ? (
+                                                <button
+                                                    onClick={() => activateMutation.mutate(agent.id)}
+                                                    className="text-emerald-600 hover:text-emerald-800"
+                                                >
+                                                    Reactivar
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => { setReassignTo(''); setDeactivating(agent); }}
+                                                    className={`text-amber-600 hover:text-amber-800 ${agent.id === currentUser.id ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                                    disabled={agent.id === currentUser.id}
+                                                    title={agent.id === currentUser.id ? 'No puedes desactivar tu propia cuenta' : ''}
+                                                >
+                                                    Desactivar
+                                                </button>
+                                            )}
+                                            {/* Borrar solo tiene sentido para un alta equivocada: en cuanto
+                                                hay un ticket de por medio, el backend lo rechaza y lo correcto
+                                                es desactivar para conservar el histórico. */}
+                                            {agent.total_tickets_count === 0 && agent.id !== currentUser.id && (
+                                                <button
+                                                    onClick={() => handleDelete(agent.id)}
+                                                    className="text-red-600 hover:text-red-900 ml-4"
+                                                    title="Solo disponible mientras no tenga ningún ticket"
+                                                >
+                                                    Eliminar
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))
@@ -240,6 +353,71 @@ export default function Agents() {
                     </table>
                 </div>
             </main>
+
+            {/* Desactivación: avisa de los tickets y ofrece reasignarlos */}
+            {deactivating && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+                        <div className="p-6 border-b border-gray-100 bg-gray-50">
+                            <h2 className="text-xl font-bold text-gray-900">Desactivar a {deactivating.name}</h2>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <p className="text-sm text-gray-600">
+                                Dejará de poder iniciar sesión y no aparecerá en los desplegables de asignación.
+                                Sus tickets, mensajes y horas imputadas se conservan tal cual.
+                            </p>
+
+                            {deactivating.open_tickets_count > 0 ? (
+                                <>
+                                    <div className="rounded-lg bg-amber-50 border border-amber-200 p-3">
+                                        <p className="text-sm text-amber-900">
+                                            Tiene <strong>{deactivating.open_tickets_count} ticket(s) abierto(s)</strong> que
+                                            quedarán asignados a su nombre hasta que alguien los asuma.
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Reasignarlos ahora a (opcional)
+                                        </label>
+                                        <select
+                                            value={reassignTo}
+                                            onChange={(e) => setReassignTo(e.target.value)}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                        >
+                                            <option value="">No reasignar — dejarlos a su nombre</option>
+                                            {agents?.filter(a => a.active !== false && a.id !== deactivating.id).map(a => (
+                                                <option key={a.id} value={a.id}>
+                                                    {a.name}{a.open_tickets_count ? ` — ${a.open_tickets_count} abiertos` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="text-xs text-gray-400 mt-1">
+                                            Solo se mueven los tickets abiertos. Los cerrados siguen atribuidos a
+                                            {' '}{deactivating.name} para que los informes históricos cuadren.
+                                        </p>
+                                    </div>
+                                </>
+                            ) : (
+                                <p className="text-sm text-gray-500">No tiene tickets abiertos.</p>
+                            )}
+                        </div>
+                        <div className="p-6 border-t border-gray-100 flex justify-end gap-3">
+                            <button
+                                onClick={() => { setDeactivating(null); setReassignTo(''); }}
+                                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900"
+                            >Cancelar</button>
+                            <button
+                                onClick={() => deactivateMutation.mutate({ id: deactivating.id, reassign_to: reassignTo })}
+                                disabled={deactivateMutation.isPending}
+                                className="px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                            >
+                                {deactivateMutation.isPending ? 'Desactivando…'
+                                    : reassignTo ? 'Desactivar y reasignar' : 'Desactivar sin reasignar'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modal */}
             {isModalOpen && (
@@ -346,6 +524,80 @@ export default function Agents() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Login history modal */}
+            {loginsAgent && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full flex flex-col max-h-[90vh]">
+                        <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50 flex-shrink-0">
+                            <div>
+                                <h2 className="text-xl font-bold text-gray-900">Registro de accesos</h2>
+                                <p className="text-sm text-gray-500">{loginsAgent.name} · {loginsAgent.email}</p>
+                            </div>
+                            <button onClick={() => setLoginsAgent(null)} className="text-gray-400 hover:text-gray-600">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-6 overflow-y-auto flex-1">
+                            {loginsLoading ? (
+                                <div className="flex justify-center py-10">
+                                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                                </div>
+                            ) : (loginsData?.data?.length ?? 0) === 0 ? (
+                                <p className="text-center text-gray-500 py-10">Sin registros de acceso.</p>
+                            ) : (
+                                <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha y hora</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dispositivo</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {loginsData.data.map((log) => (
+                                            <tr key={log.id} className="hover:bg-gray-50">
+                                                <td className="px-3 py-2 whitespace-nowrap text-gray-700">{fmtDateTime(log.created_at)}</td>
+                                                <td className="px-3 py-2 whitespace-nowrap">
+                                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${log.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                        {log.status === 'success' ? 'Correcto' : 'Fallido'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-3 py-2 whitespace-nowrap text-gray-500 font-mono text-xs">{log.ip_address || '—'}</td>
+                                                <td className="px-3 py-2 text-gray-500" title={log.user_agent || ''}>{summarizeUA(log.user_agent)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                        {loginsData && loginsData.last_page > 1 && (
+                            <div className="px-6 py-3 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
+                                <p className="text-sm text-gray-500">Página {loginsData.current_page} de {loginsData.last_page}</p>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setLoginsPage((p) => Math.max(1, p - 1))}
+                                        disabled={loginsPage === 1}
+                                        className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        Anterior
+                                    </button>
+                                    <button
+                                        onClick={() => setLoginsPage((p) => Math.min(loginsData.last_page, p + 1))}
+                                        disabled={loginsPage === loginsData.last_page}
+                                        className="px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                        Siguiente
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

@@ -1,0 +1,54 @@
+# Override para desarrollo local.
+#
+# docker-compose.yml refleja PRODUCCIÓN (certificados Let's Encrypt gestionados
+# por el contenedor certbot). En local no existen esos certificados, así que este
+# override devuelve el proxy a los certificados autofirmados de ./proxy/certs.
+#
+# Uso:  cp docker-compose.override.yml.example docker-compose.override.yml
+#
+# Docker Compose lo aplica solo si el fichero existe, y está gitignorado, así que
+# producción nunca lo tiene. NO hace falta restaurar nada tras un git pull.
+#
+# Los certificados autofirmados se generan con:
+#   mkdir -p proxy/certs && openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+#     -keyout proxy/certs/server.key -out proxy/certs/server.crt \
+#     -subj "/CN=localhost"
+
+services:
+    proxy:
+        volumes:
+            - ./proxy/nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro
+            - ./proxy/certs:/etc/certs:ro
+
+    # ── Motor de base de datos igual que producción ──────────────────────────
+    #
+    # Producción (RDS) es MariaDB 11.8, no MySQL. No son intercambiables: MySQL
+    # deduce dependencias funcionales en GROUP BY y MariaDB no, así que una
+    # consulta mal agrupada PASA en MySQL y revienta en MariaDB. Eso tumbó dos
+    # pantallas el 2026-09-23 tras haberlas probado en local sin problema.
+    #
+    # Se replica también la colación por defecto del servidor
+    # (utf8mb4_uca1400_ai_ci, la de MariaDB) porque crear una tabla sin indicar
+    # COLLATE la hereda y deja de casar con las tablas existentes, que usan
+    # utf8mb4_unicode_ci. Esa fue otra caída el mismo día.
+    #
+    # El sql_mode es el del servidor de producción; ONLY_FULL_GROUP_BY no está
+    # aquí porque lo añade Laravel en cada sesión ('strict' => true).
+    #
+    # Volumen propio: el de MySQL se conserva intacto por si hay que volver.
+    mysql:
+        image: mariadb:11.8
+        command: >
+            --character-set-server=utf8mb4
+            --collation-server=utf8mb4_uca1400_ai_ci
+            --sql-mode=STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO
+        volumes:
+            - mariadb_data:/var/lib/mysql
+        healthcheck:
+            test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+
+volumes:
+    mariadb_data:

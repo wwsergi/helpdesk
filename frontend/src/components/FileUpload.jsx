@@ -1,11 +1,11 @@
 import { useState, useRef } from 'react';
 
-export default function FileUpload({ files, onFilesChange, maxFiles = 5, maxSizeBytes = 10 * 1024 * 1024 }) {
+export default function FileUpload({ files, onFilesChange, maxFiles = 5, maxSizeBytes = 25 * 1024 * 1024 }) {
     const [dragActive, setDragActive] = useState(false);
     const fileInputRef = useRef(null);
 
     const ALLOWED_TYPES = [
-        'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/svg+xml',
+        'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/svg+xml', 'image/webp', 'image/bmp', 'image/tiff',
         'application/pdf',
         'application/msword',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -17,12 +17,21 @@ export default function FileUpload({ files, onFilesChange, maxFiles = 5, maxSize
         'application/zip', 'application/x-zip-compressed',
     ];
 
+    const ALLOWED_EXTENSIONS = [
+        'jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp', 'tif', 'tiff',
+        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+        'txt', 'csv', 'zip',
+    ];
+
     const validateFile = (file) => {
-        if (!ALLOWED_TYPES.includes(file.type)) {
-            return { valid: false, error: `${file.name}: File type not allowed` };
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        const mimeOk = ALLOWED_TYPES.includes(file.type);
+        const extOk = ALLOWED_EXTENSIONS.includes(ext);
+        if (!mimeOk && !extOk) {
+            return { valid: false, error: `${file.name}: tipo de archivo no permitido` };
         }
         if (file.size > maxSizeBytes) {
-            return { valid: false, error: `${file.name}: File exceeds ${maxSizeBytes / 1024 / 1024}MB limit` };
+            return { valid: false, error: `${file.name}: supera el límite de ${maxSizeBytes / 1024 / 1024}MB` };
         }
         return { valid: true };
     };
@@ -108,7 +117,7 @@ export default function FileUpload({ files, onFilesChange, maxFiles = 5, maxSize
                     multiple
                     onChange={handleChange}
                     className="hidden"
-                    accept=".jpg,.jpeg,.png,.gif,.svg,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
+                    accept=".jpg,.jpeg,.png,.gif,.svg,.webp,.bmp,.tif,.tiff,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip"
                 />
                 <div className="flex flex-col items-center space-y-2">
                     <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
